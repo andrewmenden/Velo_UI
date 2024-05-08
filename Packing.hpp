@@ -3,7 +3,6 @@
 #include <list>
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "DebugConsole.hpp"
 
 namespace Packing
 {

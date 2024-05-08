@@ -5,7 +5,6 @@
 #include "ID.hpp"
 
 #include "Setting.hpp"
-#include "DebugConsole.hpp"
 #include <fstream>
 #include <filesystem>
 #include <Windows.h>

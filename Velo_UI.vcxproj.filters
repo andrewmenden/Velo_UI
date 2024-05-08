@@ -66,19 +66,10 @@
     <ClInclude Include="ID.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BoolSetting.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Keys.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BoolListSetting.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Packing.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DebugConsole.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
