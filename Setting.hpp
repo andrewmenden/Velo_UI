@@ -687,130 +687,6 @@ namespace Settings
 		}
 	};
 
-#ifdef OLD
-	class StringListSetting : public Setting
-	{
-	private:
-		std::vector<std::string> defaultValue;
-		std::list<char*> value;
-		char* buffer = new char[MAX_PATH] {};
-		std::string remove = "";
-	public:
-		inline void RenderImGui() override
-		{
-			ImGui::SetNextItemWidth(width);
-			ImGui::PushID(ID::nextID());
-			if (ImGui::BeginCombo("", this->name.c_str()))
-			{
-				//ImGui::SetNextItemWidth(width);
-				ImGui::PushID(ID::nextID());
-				ImGui::InputText("", buffer, MAX_PATH);
-				ImGui::PopID();
-				ImGui::PushID(ID::nextID());
-				if (ImGui::Button("+", ImVec2(-1, 0)))
-				{
-					char* temp = new char[MAX_PATH] {};
-					strcpy(temp, buffer);
-					value.push_back(temp);
-					delete[] temp; //IF THERE IS A PROBLEM IT IS HERE
-					hasChanged = true;
-				}
-				ImGui::PopID();
-				for (auto& a : value)
-				{
-					ImGui::PushID(ID::nextID());
-					if (ImGui::Button((std::string("- ") + std::string(a)).c_str()))
-						remove = std::string(a);
-					ImGui::PopID();
-				}
-				if (remove != "")
-				{
-					char* temp = new char[MAX_PATH];
-					strcpy(temp, remove.c_str());
-					value.remove_if([temp](const char* str) {
-						return std::strcmp(str, temp) == 0;
-						});
-					delete[] temp;
-					remove = "";
-					hasChanged = true;
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::PopID();
-			if (ImGui::IsItemHovered())
-				ImGui::SetItemTooltip(this->tooltip.c_str());
-		}
-		inline void ReloadDefault() override
-		{
-			for (auto& a : value)
-				delete[] a;
-			value.clear();
-			for (auto& a : defaultValue)
-			{
-				char* temp = new char[MAX_PATH];
-				strcpy(temp, a.c_str());
-				value.push_back(temp);
-			}
-			hasChanged = true;
-		}
-		inline void LoadFromJson(nlohmann::json data) override
-		{
-			this->name = data["Name"];
-			this->ID = data["ID"];
-			this->tooltip = data["Tooltip"];
-			auto& temp = data["Default"];
-			for (const auto& a : temp)
-				defaultValue.push_back(a);
-			temp = data["Value"];
-			int i = 0;
-			for (const auto& a : temp)
-			{
-				char* temp = new char[MAX_PATH] {};
-				strcpy(temp, std::string(a).c_str());
-				value.push_back(temp);
-			}
-		}
-		inline void GetJson(nlohmann::json& json, bool all) override
-		{
-			if (hasChanged.isChanged() || all)
-			{
-				nlohmann::json temp;
-				temp["ID"] = this->ID;
-				for (const auto& a : value)
-					temp["Value"].push_back(std::string(a));
-				//placeholder for replace in GetJson
-				json.push_back(temp);
-			}
-			hasChanged = false;
-		}
-		void UpdateJson(nlohmann::json json) override
-		{
-			for (const auto& data : json["Changes"])
-			{
-				if (data["ID"] == this->ID)
-				{
-					for (const auto& a : value)
-						delete[] a;
-					auto& temp = data["Value"];
-					int i = 0;
-					for (const auto& a : temp)
-					{
-						char* temp = new char[MAX_PATH] {};
-						strcpy(temp, std::string(a).c_str());
-						value.push_back(temp);
-					}
-					break;
-				}
-			}
-		}
-		inline ~StringListSetting()
-		{
-			for (const auto& a : value)
-				delete[] a;
-			delete[] buffer;
-		}
-	};
-#else
 	class StringListSetting : public Setting
 	{
 	private:
@@ -938,7 +814,6 @@ namespace Settings
 			delete[] buffer;
 		}
 	};
-#endif
 
 	class EnumeratorSetting : public Setting
 	{
