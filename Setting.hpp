@@ -264,6 +264,7 @@ namespace Settings
 			value = defaultValue;
 			hotkey = defaultHotkey;
 			hasChanged = true;
+			strcpy(keyName, Keys::KeyCodeToString(hotkey).c_str());
 		}
 		inline void LoadFromJson(nlohmann::json data) override
 		{
@@ -343,6 +344,7 @@ namespace Settings
 		inline void ReloadDefault() override
 		{
 			value = defaultValue;
+			strcpy(keyName, Keys::KeyCodeToString(value).c_str());
 		}
 		inline void LoadFromJson(nlohmann::json data) override
 		{
@@ -685,6 +687,7 @@ namespace Settings
 		}
 	};
 
+#ifdef OLD
 	class StringListSetting : public Setting
 	{
 	private:
@@ -807,6 +810,135 @@ namespace Settings
 			delete[] buffer;
 		}
 	};
+#else
+	class StringListSetting : public Setting
+	{
+	private:
+		std::vector<std::string> defaultValue;
+		std::list<std::string> value;
+		char* buffer = new char[MAX_PATH] {};
+		std::string remove = "";
+	public:
+		inline void RenderImGui() override
+		{
+			ImGui::SetNextItemWidth(width);
+			ImGui::PushID(ID::nextID());
+			if (ImGui::BeginCombo("", this->name.c_str()))
+			{
+				//ImGui::SetNextItemWidth(width);
+				ImGui::PushID(ID::nextID());
+				ImGui::InputText("", buffer, MAX_PATH);
+				ImGui::PopID();
+				ImGui::PushID(ID::nextID());
+				if (ImGui::Button("+", ImVec2(-1, 0)))
+				{
+					bool doThing = true;
+					if (strcmp(buffer, "") != 0)
+					{
+						for (const auto& a : value)
+						{
+							if (strcmp(buffer, a.c_str()) == 0)
+							{
+								doThing = false;
+								break;
+							}
+						}
+						if (doThing)
+						{
+							value.push_back(std::string(buffer));
+							hasChanged = true;
+						}
+					}
+				}
+				ImGui::PopID();
+				for (auto& a : value)
+				{
+					ImGui::PushID(ID::nextID());
+					if (ImGui::Button((std::string("- ") + std::string(a)).c_str()))
+						remove = std::string(a);
+					ImGui::PopID();
+				}
+				if (remove != "")
+				{
+					std::string temp(remove);
+					value.remove_if([temp](std::string str) {
+						return temp == str;
+					});
+					remove = "";
+					hasChanged = true;
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::PopID();
+			if (ImGui::IsItemHovered())
+				ImGui::SetItemTooltip(this->tooltip.c_str());
+		}
+		inline void ReloadDefault() override
+		{
+			value.clear();
+			for (auto& a : defaultValue)
+			{
+				char* temp = new char[MAX_PATH];
+				strcpy(temp, a.c_str());
+				value.push_back(temp);
+			}
+			hasChanged = true;
+		}
+		inline void LoadFromJson(nlohmann::json data) override
+		{
+			this->name = data["Name"];
+			this->ID = data["ID"];
+			this->tooltip = data["Tooltip"];
+			auto& temp = data["Default"];
+			for (const auto& a : temp)
+				defaultValue.push_back(a);
+			temp = data["Value"];
+			int i = 0;
+			for (const auto& a : temp)
+			{
+				char* temp = new char[MAX_PATH] {};
+				strcpy(temp, std::string(a).c_str());
+				value.push_back(temp);
+			}
+			strcpy(buffer, "");
+		}
+		inline void GetJson(nlohmann::json& json, bool all) override
+		{
+			if (hasChanged.isChanged() || all)
+			{
+				nlohmann::json temp;
+				temp["ID"] = this->ID;
+				for (const auto& a : value)
+					temp["Value"].push_back(std::string(a));
+				//placeholder for replace in GetJson
+				json.push_back(temp);
+			}
+			hasChanged = false;
+		}
+		void UpdateJson(nlohmann::json json) override
+		{
+			for (const auto& data : json["Changes"])
+			{
+				if (data["ID"] == this->ID)
+				{
+					auto& temp = data["Value"];
+					int i = 0;
+					for (const auto& a : temp)
+					{
+						char* temp = new char[MAX_PATH] {};
+						strcpy(temp, std::string(a).c_str());
+						value.push_back(temp);
+					}
+					break;
+				}
+			}
+		}
+		inline ~StringListSetting()
+		{
+			delete[] buffer;
+		}
+	};
+#endif
 
 	class EnumeratorSetting : public Setting
 	{

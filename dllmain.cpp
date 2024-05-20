@@ -66,6 +66,7 @@ extern "C"
         ImGui_ImplWin32_Init(hwnd);
         ImGui_ImplDX11_Init(deviced3d11, deviceContext);
         app.setIo();
+        app.loadFonts(16.0f);
     }
 
     __declspec(dllexport) void InitializeImGui_opengl()
@@ -75,6 +76,7 @@ extern "C"
         ImGui_ImplSDL2_InitForOpenGL(SDL_GL_GetCurrentWindow(), SDL_GL_GetCurrentContext());
         ImGui_ImplOpenGL3_Init();
         app.setIo();
+        app.loadFonts(16.0f);
     }
 
     __declspec(dllexport) void unfocusAll()
