@@ -51,16 +51,10 @@
     <ClInclude Include="imgui\imstb_truetype.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="json.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="App.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Setting.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="EventBool.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ID.hpp">
@@ -70,6 +64,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Packing.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Global.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProcessLoopbackCapture\ProcessLoopbackCapture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioCapture.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\json.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -105,6 +111,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dllmain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessLoopbackCapture\ProcessLoopbackCapture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

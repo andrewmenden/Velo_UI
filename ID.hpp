@@ -1,14 +1,19 @@
-#pragma once
+#ifndef ID_H
+#define ID_H
 
 namespace ID
 {
-	int id = 0;
-	int nextID()
+	inline int id = 0;
+
+	inline int nextID()
 	{
 		return id++;
 	}
-	void resetID()
+
+	inline void resetID()
 	{
 		id = 0;
 	}
 }
+
+#endif
