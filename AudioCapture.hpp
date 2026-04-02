@@ -14,7 +14,7 @@ namespace AudioCapture
     std::mutex audioMtx;
     std::condition_variable audioCv;
 
-    inline void onDataCapture(const std::vector<unsigned char>::iterator& i1, const std::vector<unsigned char>::iterator& i2, void* pUserData)
+    inline void OnDataCapture(const std::vector<unsigned char>::iterator& i1, const std::vector<unsigned char>::iterator& i2, void* pUserData)
     {
         if (first)
         {
@@ -27,14 +27,14 @@ namespace AudioCapture
         audioData.insert(audioData.end(), i1, i2);
     }
 
-    inline void start(int sampleRate)
+    inline void Start(int sampleRate)
     {
         audioData.reserve(16 * 1000 * 1000);
 
         loopbackCapture = new ProcessLoopbackCapture;
         loopbackCapture->SetCaptureFormat(sampleRate, 16, 2, WAVE_FORMAT_PCM);
         loopbackCapture->SetTargetProcess(GetCurrentProcessId(), true);
-        loopbackCapture->SetCallback(&onDataCapture);
+        loopbackCapture->SetCallback(&OnDataCapture);
         loopbackCapture->SetIntermediateThreadEnabled(false);
         loopbackCapture->StartCapture();
 
@@ -44,7 +44,7 @@ namespace AudioCapture
         audioCv.wait(lock); // wait for the first data to be captured and only then return
     }
 
-    inline void stop(const char* filename)
+    inline void Stop(const char* filename)
     {
         loopbackCapture->StopCapture();
         WAVEFORMATEX format{};

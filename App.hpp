@@ -31,7 +31,7 @@ private:
 	bool firstRender = true;
 
 public:
-	inline void init()
+	inline void Init()
 	{
 		ImGuiIO& io = ImGui::GetIO();
 
@@ -45,17 +45,17 @@ public:
 		io.Fonts->Build();
 	}
 
-	inline bool hasIni()
+	inline bool HasIni()
 	{
 		return std::filesystem::exists(iniPath);
 	}
 
-	inline void resetLayout()
+	inline void ResetLayout()
 	{
 		Packing packing{ Global::windowSize };
 		uiModule->ChangeBounds(packing.nextWindow());
 
-		auto enabledIt = uiModule->getWindows().getValue().begin();
+		auto enabledIt = uiModule->GetWindows().GetValue().begin();
 		for (auto& m : modules | std::views::drop(1))
 		{
 			if (*(enabledIt++))
@@ -63,15 +63,15 @@ public:
 		}
 	}
 
-	inline void restoreLayoutFromIni()
+	inline void RestoreLayoutFromIni()
 	{
-		if (hasIni())
+		if (HasIni())
 			ImGui::LoadIniSettingsFromDisk(iniPath);
 		else
-			resetLayout();
+			ResetLayout();
 	}
 
-	inline void loadFromJson(const nlohmann::json& data)
+	inline void LoadFromJson(const nlohmann::json& data)
 	{
 		for (const auto& m : data["Modules"])
 		{
@@ -86,62 +86,68 @@ public:
 		ImGui::GetIO().IniFilename = iniPath;
 	}
 
-	inline void renderImGui()
+	inline void RenderImGui()
 	{
 		ID::resetID();
 
 		if (firstRender)
 		{
-			restoreLayoutFromIni();
+			RestoreLayoutFromIni();
 			firstRender = false;
 		}
 
 		bool dummy;
 		uiModule->RenderImGui(dummy);
 
-		Global::inputWidth = uiModule->getInputWidth().getValue();
-		Global::enableUiKey = uiModule->getEnabled().getValue().hotkey;
+		Global::inputWidth = uiModule->GetInputWidth().GetValue();
+		Global::enableUiKey = uiModule->GetEnabled().GetValue().hotkey;
+		bool searchChanged = uiModule->GetSearchChanged();
+		std::string search = uiModule->GetSearch();
 
 		//iterate through the remaining modules
-		auto enabledIt = uiModule->getWindows().getValue().begin();
+		auto enabledIt = uiModule->GetWindows().GetValue().begin();
 		for (const auto& m : modules | std::views::drop(1))
 		{
 			bool open = *enabledIt;
+			if (searchChanged)
+				m->UpdateSearch(search);
 			if (open)
+			{
 				m->RenderImGui(open);
+			}
 			if (open != *enabledIt)
-				uiModule->getWindows().setChanged();
+				uiModule->GetWindows().SetChanged();
 			*enabledIt = open;
 
 			++enabledIt;
 		}
 
-		if (uiModule->isRequestingResetLayout())
-			resetLayout();
+		if (uiModule->IsRequestingResetLayout())
+			ResetLayout();
 	}
 
-	inline void changesAsJson(nlohmann::json& json)
+	inline void ChangesAsJson(nlohmann::json& json)
 	{
 		for (const auto& m : modules)
-			m->changesAsJson(json);
+			m->ChangesAsJson(json);
 	}
 
-	inline void updateFromJson(const nlohmann::json& json)
+	inline void UpdateFromJson(const nlohmann::json& json)
 	{
 		for (auto& m : modules)
-			m->updateFromJson(json);
+			m->UpdateFromJson(json);
 	}
 
-	inline std::string changesAsJsonString()
+	inline std::string ChangesAsJsonString()
 	{
 		if (Global::settingChanged)
 		{
 			Global::settingChanged = false;
 			nlohmann::json temp;
 
-			changesAsJson(temp);
+			ChangesAsJson(temp);
 			for (auto& m : modules)
-				m->visit([](Setting* s) { s->resetChanged(); });
+				m->Visit([](Setting* s) { s->ResetChanged(); });
 
 			nlohmann::json json;
 			json["Changes"] = temp;

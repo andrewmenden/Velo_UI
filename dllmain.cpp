@@ -39,7 +39,7 @@ extern "C"
         ImGui::CreateContext();
         ImGui_ImplWin32_Init(Global::gameHwnd);
         ImGui_ImplDX11_Init(Global::deviced3d11, Global::deviceContext);
-        Global::app.init();
+        Global::app.Init();
     }
 
     __declspec(dllexport) void __cdecl InitializeImGui_opengl()
@@ -48,7 +48,7 @@ extern "C"
         ImGui::CreateContext();
         ImGui_ImplSDL2_InitForOpenGL(SDL_GL_GetCurrentWindow(), SDL_GL_GetCurrentContext());
         ImGui_ImplOpenGL3_Init();
-        Global::app.init();
+        Global::app.Init();
     }
 
     __declspec(dllexport) void __cdecl UnfocusAll()
@@ -79,7 +79,7 @@ extern "C"
         ImGui::NewFrame();
         ImGui::GetIO().DisplaySize = ImVec2{ frameW, frameH };
 
-        Global::app.renderImGui();
+        Global::app.RenderImGui();
 
         ImGui::EndFrame();
         ImGui::Render();
@@ -111,12 +111,17 @@ extern "C"
         ImGui::DestroyContext();
     }
 
-    __declspec(dllexport) void __cdecl ProcessEvent(SDL_Event* event)
+    __declspec(dllexport) void __cdecl ProcessEvent(SDL_Event *event)
     {
         if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP)
             event->button.windowID = (Uint32)Global::gameHwnd;
         if (event->type == SDL_MOUSEWHEEL)
             event->wheel.windowID = (Uint32)Global::gameHwnd;
+        if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP)
+            event->key.windowID = (Uint32)Global::gameHwnd;
+        if (event->type == SDL_TEXTINPUT)
+            event->text.windowID = (Uint32)Global::gameHwnd;
+
         ImGui_ImplSDL2_ProcessEvent(event);
     }
 
@@ -124,20 +129,20 @@ extern "C"
     __declspec(dllexport) void __cdecl LoadFromJson(const char* json)
     {
         nlohmann::json jsonData = nlohmann::json::parse(json);
-        Global::app.loadFromJson(jsonData);
+        Global::app.LoadFromJson(jsonData);
     }
 
     // Update settings from Velo
     __declspec(dllexport) void __cdecl UpdateFromJson(const char* json)
     {
         nlohmann::json jsonData = nlohmann::json::parse(json);
-        Global::app.updateFromJson(jsonData);
+        Global::app.UpdateFromJson(jsonData);
     }
 
     // Send setting changes to Velo
     __declspec(dllexport) char* __cdecl GetUpdatesAsJson()
     {
-        std::string json = Global::app.changesAsJsonString();
+        std::string json = Global::app.ChangesAsJsonString();
         if (json.empty())
             return nullptr;
         char* out = (char*)CoTaskMemAlloc(json.size() + 1);
@@ -356,11 +361,11 @@ extern "C"
 
     __declspec(dllexport) void __cdecl StartAudioCapture(int sampleRate)
     {
-        AudioCapture::start(sampleRate);
+        AudioCapture::Start(sampleRate);
     }
 
     __declspec(dllexport) void __cdecl StopAudioCapture(const char* filename)
     {
-        AudioCapture::stop(filename);
+        AudioCapture::Stop(filename);
     }
 }
