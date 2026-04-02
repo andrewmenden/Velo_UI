@@ -1094,6 +1094,10 @@ public:
 	}
 
 private:
+#pragma warning(push)
+#pragma warning(disable : 4068)
+#pragma diag_suppress 27
+#pragma warning(pop)
 	inline void RenderReset()
 	{
 		bool hasScroll = ImGui::GetCurrentWindow()->ScrollbarY;
@@ -1121,6 +1125,7 @@ private:
 public:
 	inline void renderImGui() override
 	{
+		u8"\xe800";
 		ImGui::SetWindowFontScale(1.0f);
 		if (ImGui::TreeNode(name.c_str()))
 		{
