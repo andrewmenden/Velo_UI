@@ -113,6 +113,10 @@ extern "C"
 
     __declspec(dllexport) void __cdecl ProcessEvent(SDL_Event* event)
     {
+        if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP)
+            event->button.windowID = (Uint32)Global::gameHwnd;
+        if (event->type == SDL_MOUSEWHEEL)
+            event->wheel.windowID = (Uint32)Global::gameHwnd;
         ImGui_ImplSDL2_ProcessEvent(event);
     }
 
