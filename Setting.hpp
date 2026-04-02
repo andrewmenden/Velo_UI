@@ -93,7 +93,7 @@ protected:
 		if (ImGui::IsItemClicked(1))
 		{
 			static std::unique_ptr<Setting> clipboard;
-			if (ImGui::IsKeyDown(ImGuiKey_ModShift))
+			if (ImGui::IsKeyDown(ImGuiMod_Shift))
 			{
 				clipboard = copy();
 			}
