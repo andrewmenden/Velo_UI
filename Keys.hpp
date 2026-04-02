@@ -6,13 +6,13 @@
 
 #include "Global.hpp"
 
-constexpr int unmappedKey = 0x97;
-constexpr int modifierShift = 0x100;
-constexpr int modifierCtrl = 0x200;
-constexpr int modifierGamePad = 0x400;
-constexpr int modifierAny = 0x800;
+constexpr uint16_t unmappedKey = 0x97;
+constexpr uint16_t modifierShift = 0x100;
+constexpr uint16_t modifierCtrl = 0x200;
+constexpr uint16_t modifierGamePad = 0x400;
+constexpr uint16_t modifierAny = 0x800;
 
-inline const std::unordered_map<uint32_t, const char*> keyStringMap =
+inline const std::unordered_map<uint16_t, const char*> keyStringMap =
 {
 	{ VK_LBUTTON,     "LBUTTON" },
 	{ VK_RBUTTON,     "RBUTTON" },
@@ -99,7 +99,7 @@ inline const std::unordered_map<uint32_t, const char*> keyStringMap =
 	{ unmappedKey,            "N/A" }
 };
 
-inline const std::unordered_map<uint32_t, const char*> gamePadButtonStringMap =
+inline const std::unordered_map<uint16_t, const char*> gamePadButtonStringMap =
 {
 	{ 0, "A" },
 	{ 1, "B" },
@@ -120,7 +120,7 @@ inline const std::unordered_map<uint32_t, const char*> gamePadButtonStringMap =
 	{ 16, "DPAD DOWN" }
 };
 
-inline std::string keyCodeToString(UINT keyCode)
+inline std::string keyCodeToString(uint16_t keyCode)
 {
 	if (keyCode & modifierGamePad)
 	{
@@ -172,26 +172,26 @@ inline std::string keyCodeToString(UINT keyCode)
 	return name;
 }
 
-inline int getPressedKey(int ignore)
+inline uint16_t getPressedKey(uint16_t ignore)
 {
-	for (int b = 0; b < Global::gamePadButtonsDown.size(); b++)
+	for (uint16_t b = 0; b < static_cast<uint16_t>(Global::gamePadButtonsDown.size()); b++)
 	{
 		if (Global::gamePadButtonsDown[b] && (b | modifierGamePad) != ignore)
 			return b | modifierGamePad;
 	}
 
-	int shiftMod = 
+	uint16_t shiftMod =
 		GetAsyncKeyState(VK_LSHIFT) & 0x8000 ||
 		GetAsyncKeyState(VK_RSHIFT) & 0x8000 || 
 		GetAsyncKeyState(VK_SHIFT) & 0x8000 ? modifierShift : 0;
-	int controlMod =
+	uint16_t controlMod =
 		GetAsyncKeyState(VK_LCONTROL) & 0x8000 ||
 		GetAsyncKeyState(VK_RCONTROL) & 0x8000 ||
 		GetAsyncKeyState(VK_CONTROL) & 0x8000 ? modifierCtrl : 0;
 
-	int key = 0;
+	uint16_t key = 0;
 
-	for (int k = 8; k < 256; k++)
+	for (uint16_t k = 8; k < 256; k++)
 	{
 		if (k == VK_LSHIFT || k == VK_RSHIFT || k == VK_SHIFT || k == VK_LCONTROL || k == VK_RCONTROL || k == VK_CONTROL)
 			continue;

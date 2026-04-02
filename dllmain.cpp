@@ -139,7 +139,7 @@ extern "C"
         char* out = (char*)CoTaskMemAlloc(json.size() + 1);
         if (out == nullptr)
             return nullptr;
-        strcpy(out, json.data());
+        strcpy_s(out, json.size() + 1, json.data());
         return out;
     }
 
@@ -326,7 +326,7 @@ extern "C"
         char* out = (char*)CoTaskMemAlloc(string.size() + 1);
         if (out == nullptr)
             return nullptr;
-        strcpy(out, string.data());
+        strcpy_s(out, string.size() + 1, string.data());
         return out;
     }
 

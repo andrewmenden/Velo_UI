@@ -1,6 +1,8 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
+#define NOMINMAX
+
 #include <Windows.h>
 #include <imgui.h>
 #include <imgui_internal.h>

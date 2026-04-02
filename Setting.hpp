@@ -339,7 +339,7 @@ private:
 	int previousHotkey = -1;
 	bool wasPressed = false;
 	std::chrono::high_resolution_clock::time_point pressTime;
-	std::array<char, 100> keyName;
+	std::array<char, 100> keyName{};
 
 public:
 	inline ToggleSetting(const nlohmann::json& json) :
@@ -349,7 +349,7 @@ public:
 	{
 		if (value.hotkey != previousHotkey)
 		{
-			strcpy(keyName.data(), keyCodeToString(value.hotkey).c_str());
+			strcpy_s(keyName.data(), keyName.size(), keyCodeToString(value.hotkey).c_str());
 			previousHotkey = value.hotkey;
 		}
 
@@ -403,7 +403,7 @@ class HotkeySetting : public SettingOfType<int>
 	int previousValue = -1;
 	bool wasPressed = false;
 	std::chrono::high_resolution_clock::time_point pressTime;
-	std::array<char, 100> keyName;
+	std::array<char, 100> keyName{};
 
 public:
 	inline HotkeySetting(const nlohmann::json& json) :
@@ -413,7 +413,7 @@ public:
 	{
 		if (value != previousValue)
 		{
-			strcpy(keyName.data(), keyCodeToString(value).c_str());
+			strcpy_s(keyName.data(), keyName.size(), keyCodeToString(value).c_str());
 			previousValue = value;
 		}
 
@@ -1051,7 +1051,7 @@ public:
 		if (ImGui::DragInt2("position", value.position.data()))
 			setChanged();
 		ImGui::SetNextItemWidth(Global::inputWidth);
-		if (ImGui::DragInt2("size", value.size.data(), 1, 0, 1 << 31 - 1))
+		if (ImGui::DragInt2("size", value.size.data(), 1, 0, 1 << (31 - 1)))
 			setChanged();
 		ImGui::PopID();
 	}
