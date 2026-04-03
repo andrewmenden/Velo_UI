@@ -700,7 +700,7 @@ public:
 	virtual inline void UpdateSearch(std::string search) override
 	{
 		matchesSearch = Matches(search);
-		for (int i = 0; i < value.size(); ++i)
+		for (size_t i = 0; i < value.size(); ++i)
 		{
 			std::string lowerIdentifier = valueIdentifiers[i];
 			std::transform(lowerIdentifier.begin(), lowerIdentifier.end(), lowerIdentifier.begin(), ::tolower);
@@ -1345,8 +1345,8 @@ public:
 				if (!s->GetMatchesSearch())
 					ImGui::PopStyleVar();
 			}
-			ImGui::End();
 		}
+		ImGui::End();
 	}
 
 	inline void ResetDefaults()
@@ -1439,8 +1439,8 @@ public:
 				requestResetLayout = true;
 			ImGui::PopID();
 
-			ImGui::End();
 		}
+		ImGui::End();
 	}
 
 	inline bool IsRequestingResetLayout()
