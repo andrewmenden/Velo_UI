@@ -27,7 +27,7 @@ class App
 private:
 	std::vector<std::unique_ptr<Module>> modules; // modules[0] is always the UI module
 	UiModule* uiModule = nullptr;
-	Cycle cycle{};
+	nlohmann::json pendingChanges;
 
 	bool firstRender = true;
 
@@ -92,6 +92,8 @@ public:
 
 	inline void RenderImGui()
 	{
+		Cycle cycle{};
+
 		ID::resetID();
 
 		if (firstRender)
@@ -144,6 +146,9 @@ public:
 
 		if (uiModule->IsRequestingResetLayout())
 			ResetLayout();
+
+		pendingChanges.insert(cycle.changes.begin(), cycle.changes.end());
+		cycle.changes.clear();
 	}
 
 	inline void UpdateFromJson(const nlohmann::json& json)
@@ -154,11 +159,11 @@ public:
 
 	inline std::string ChangesAsJsonString()
 	{
-		if (!cycle.changes.empty())
+		if (!pendingChanges.empty())
 		{
 			nlohmann::json json;
-			json["Changes"] = std::move(cycle.changes);
-			cycle.changes.clear();
+			json["Changes"] = std::move(pendingChanges);
+			pendingChanges.clear();
 			return json.dump(0);
 		}
 		return "";
