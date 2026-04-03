@@ -104,6 +104,8 @@ public:
 		bool searchChanged = uiModule->GetSearchChanged();
 		std::string search = uiModule->GetSearch();
 
+		if (searchChanged)
+			uiModule->UpdateSearch(search);
 		//iterate through the remaining modules
 		auto enabledIt = uiModule->GetWindows().GetValue().begin();
 		for (const auto& m : modules | std::views::drop(1))

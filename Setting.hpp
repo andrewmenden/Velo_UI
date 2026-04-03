@@ -622,12 +622,14 @@ public:
 class BoolListSetting : public SettingOfType<std::vector<bool>>
 {
 	std::vector<std::string> valueIdentifiers;
+	std::vector<bool> matchesSearchVector;
 	bool collapsing = false;
 
 public:
 	inline BoolListSetting(const nlohmann::json& json) :
 		SettingOfType{ json },
 		valueIdentifiers{ json["Identifiers"].get<std::vector<std::string>>()},
+		matchesSearchVector(value.size(), true),
 		collapsing{ json["Collapsing"] } {}
 
 	inline void RenderImGui() override
@@ -641,12 +643,15 @@ public:
 				{
 					ImGui::PushID(ID::nextID());
 					bool open = *it;
+					if (!matchesSearchVector[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 					if (ImGui::Checkbox(valueIdentifiers[i++].c_str(), &open))
 					{
 						*it = open;
 						SetChanged();
 					}
+					if (!matchesSearchVector[i - 1] && matchesSearch) ImGui::PopStyleVar();
 					ImGui::PopID();
+					i++;
 				}
 				ImGui::EndMenu();
 			}
@@ -672,11 +677,13 @@ public:
 				for (auto it = value.begin(); it != value.end(); ++it)
 				{
 					ImGui::PushID(ID::nextID());
+					if (!matchesSearchVector[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 					if (ImGui::MenuItem(valueIdentifiers[i++].c_str(), nullptr, *it))
 					{
 						*it = !*it;
 						SetChanged();
 					}
+					if (!matchesSearchVector[i - 1] && matchesSearch) ImGui::PopStyleVar();
 					ImGui::PopID();
 				}
 			}
@@ -688,6 +695,20 @@ public:
 	inline SettingType GetType() override
 	{
 		return stBoolList;
+	}
+
+	virtual inline void UpdateSearch(std::string search) override
+	{
+		matchesSearch = Matches(search);
+		for (int i = 0; i < value.size(); ++i)
+		{
+			std::string lowerIdentifier = valueIdentifiers[i];
+			std::transform(lowerIdentifier.begin(), lowerIdentifier.end(), lowerIdentifier.begin(), ::tolower);
+			std::string lowerSearch = search;
+			std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), ::tolower);
+			matchesSearchVector[i] = lowerIdentifier.find(lowerSearch) != std::string::npos;
+			matchesSearch = matchesSearch || matchesSearchVector[i];
+		}
 	}
 
 	MAKE_COPY_PASTE(BoolListSetting)
@@ -1399,13 +1420,19 @@ public:
 		if (ImGui::Begin(name.c_str()))
 		{
 			ImGui::PushID(ID::nextID());
-			ImGui::SetNextItemWidth(Global::inputWidth);
-			if (ImGui::InputText("search", searchBuffer, sizeof(searchBuffer)))
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::InputTextWithHint("", "Search...", searchBuffer, sizeof(searchBuffer)))
 				searchChanged = true;
 			ImGui::PopID();
 
 			for (const auto& setting : settings)
+			{
+				if (!setting->GetMatchesSearch())
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 				setting->RenderImGui();
+				if (!setting->GetMatchesSearch())
+					ImGui::PopStyleVar();
+			}
 
 			ImGui::PushID(ID::nextID());
 			if (ImGui::Button("reset layout"))
