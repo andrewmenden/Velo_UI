@@ -314,9 +314,9 @@ public:
 struct Toggle
 {
 	bool state;
-	int hotkey;
+	uint16_t hotkey;
 
-	inline Toggle(bool state, int hotkey) :
+	inline Toggle(bool state, uint16_t hotkey) :
 		state{ state },
 		hotkey{ hotkey } {}
 
@@ -336,7 +336,7 @@ struct Toggle
 class ToggleSetting : public SettingOfType<Toggle>
 {
 private:
-	int previousHotkey = -1;
+	uint16_t previousHotkey = -1;
 	bool wasPressed = false;
 	std::chrono::high_resolution_clock::time_point pressTime;
 	std::array<char, 100> keyName{};
@@ -367,7 +367,7 @@ public:
 			}
 			else
 			{
-				int k = getPressedKey(cycle.enableUiHotkey);
+				uint16_t k = getPressedKey(cycle.enableUiHotkey);
 				if (k != 0)
 				{
 					if (!wasPressed)
@@ -398,9 +398,9 @@ public:
 	MAKE_COPY_PASTE(ToggleSetting)
 };
 
-class HotkeySetting : public SettingOfType<int>
+class HotkeySetting : public SettingOfType<uint16_t>
 {
-	int previousValue = -1;
+	uint16_t previousValue = -1;
 	bool wasPressed = false;
 	std::chrono::high_resolution_clock::time_point pressTime;
 	std::array<char, 100> keyName{};
@@ -431,7 +431,7 @@ public:
 			}
 			else
 			{
-				int k = getPressedKey(cycle.enableUiHotkey);
+				uint16_t k = getPressedKey(cycle.enableUiHotkey);
 				if (k != 0)
 				{
 					if (!wasPressed)
