@@ -113,7 +113,7 @@ public:
 		ImGui::PopStyleVar(2);
 
 		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+		ImGui::DockSpace(dockspace_id, ImVec2{ 0.0f, 0.0f }, ImGuiDockNodeFlags_PassthruCentralNode);
 		ImGui::End();
 
 		bool dummy;
@@ -121,25 +121,22 @@ public:
 
 		Global::inputWidth = uiModule->GetInputWidth().GetValue();
 		Global::enableUiKey = uiModule->GetEnabled().GetValue().hotkey;
-		bool searchChanged = uiModule->GetSearchChanged();
-		std::string search = uiModule->GetSearch();
 
-		if (searchChanged)
-			uiModule->UpdateSearch(search);
+		if (uiModule->GetSearchChanged())
+		{
+			for (const auto& m : modules)
+				m->UpdateSearch(uiModule->GetSearch());
+		}
+
 		//iterate through the remaining modules
 		auto enabledIt = uiModule->GetWindows().GetValue().begin();
 		for (const auto& m : modules | std::views::drop(1))
 		{
-			bool open = *enabledIt;
-			if (searchChanged)
-				m->UpdateSearch(search);
-			if (open)
-			{
-				m->RenderImGui(open);
-			}
-			if (open != *enabledIt)
+			bool wasEnabled = *enabledIt;
+			if (*enabledIt)
+				m->RenderImGui(*enabledIt);
+			if (*enabledIt != wasEnabled)
 				uiModule->GetWindows().SetChanged();
-			*enabledIt = open;
 
 			++enabledIt;
 		}

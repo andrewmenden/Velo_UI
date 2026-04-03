@@ -5,11 +5,11 @@
 
 #include <json.hpp>
 
+#include "BoolVector.hpp"
 #include "ID.hpp"
 #include "Keys.hpp"
 #include "Packing.hpp"
 #include "Global.hpp"
-
 
 #define MAKE_COPY_PASTE(T) \
 inline std::unique_ptr<Setting> Copy() const override \
@@ -43,6 +43,15 @@ enum SettingType : int
 	stInputBox = 13,
 	stCategory = 14
 };
+
+constexpr bool LowerContains(std::string_view haystack, std::string_view pattern)
+{
+	constexpr auto toLower = [](char c) { return std::tolower(c); };
+
+	return 
+		pattern.empty() || 
+		std::ranges::search(haystack, pattern, {}, toLower, toLower).begin() != haystack.end();
+}
 
 constexpr float divideRange = 1000.0f;
 
@@ -94,9 +103,9 @@ public:
 		return matchesSearch;
 	}
 
-	virtual inline void UpdateSearch(std::string search)
+	virtual inline void UpdateSearch(std::string_view pattern)
 	{
-		matchesSearch = Matches(search);
+		matchesSearch = LowerContains(name, pattern);
 	}
 
 	inline const std::string& GetName() const
@@ -137,17 +146,6 @@ protected:
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(tooltip.c_str());
 		CheckCopyPaste();
-	}
-
-	inline bool Matches(std::string search) const
-	{
-		if (search.empty()) return true;
-		std::string lowerName = name;
-		// std::string lowerTooltip = tooltip;
-		std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
-		// std::transform(lowerTooltip.begin(), lowerTooltip.end(), lowerTooltip.begin(), ::tolower);
-		std::transform(search.begin(), search.end(), search.begin(), ::tolower);
-		return lowerName.find(search) != std::string::npos;
 	}
 
 public:
@@ -619,17 +617,17 @@ public:
 };
 
 // std::vector<bool> is annoying
-class BoolListSetting : public SettingOfType<std::vector<bool>>
+class BoolListSetting : public SettingOfType<bool_vector>
 {
-	std::vector<std::string> valueIdentifiers;
-	std::vector<bool> matchesSearchVector;
+	std::vector<std::string> identifiers;
+	bool_vector identifiersMatchesSearch;
 	bool collapsing = false;
 
 public:
 	inline BoolListSetting(const nlohmann::json& json) :
 		SettingOfType{ json },
-		valueIdentifiers{ json["Identifiers"].get<std::vector<std::string>>()},
-		matchesSearchVector(value.size(), true),
+		identifiers{ json["Identifiers"].get<std::vector<std::string>>()},
+		identifiersMatchesSearch(value.size(), true),
 		collapsing{ json["Collapsing"] } {}
 
 	inline void RenderImGui() override
@@ -639,18 +637,15 @@ public:
 			if (ImGui::BeginMenu(name.c_str(), true))
 			{
 				size_t i = 0;
-				for (auto it = value.begin(); it != value.end(); ++it)
+				for (bool& v : value)
 				{
 					ImGui::PushID(ID::nextID());
-					bool open = *it;
-					if (!matchesSearchVector[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-					if (ImGui::Checkbox(valueIdentifiers[i++].c_str(), &open))
-					{
-						*it = open;
+					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+					if (ImGui::Checkbox(identifiers[i].c_str(), &v))
 						SetChanged();
-					}
-					if (!matchesSearchVector[i - 1] && matchesSearch) ImGui::PopStyleVar();
+					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PopStyleVar();
 					ImGui::PopID();
+
 					i++;
 				}
 				ImGui::EndMenu();
@@ -662,29 +657,29 @@ public:
 			{
 				if (ImGui::Button("show all"))
 				{
-					for (auto it = value.begin(); it != value.end(); ++it)
-						*it = true;
+					std::ranges::fill(value, true);
 					SetChanged();
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("hide all"))
 				{
-					for (auto it = value.begin(); it != value.end(); ++it)
-						*it = false;
+					std::ranges::fill(value, false);
 					SetChanged();
 				}
 				size_t i = 0;
-				for (auto it = value.begin(); it != value.end(); ++it)
+				for (bool& v : value)
 				{
 					ImGui::PushID(ID::nextID());
-					if (!matchesSearchVector[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-					if (ImGui::MenuItem(valueIdentifiers[i++].c_str(), nullptr, *it))
+					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+					if (ImGui::MenuItem(identifiers[i].c_str(), nullptr, v))
 					{
-						*it = !*it;
+						v = !v;
 						SetChanged();
 					}
-					if (!matchesSearchVector[i - 1] && matchesSearch) ImGui::PopStyleVar();
+					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PopStyleVar();
 					ImGui::PopID();
+
+					i++;
 				}
 			}
 		}
@@ -697,18 +692,11 @@ public:
 		return stBoolList;
 	}
 
-	virtual inline void UpdateSearch(std::string search) override
+	virtual inline void UpdateSearch(std::string_view pattern) override
 	{
-		matchesSearch = Matches(search);
-		for (size_t i = 0; i < value.size(); ++i)
-		{
-			std::string lowerIdentifier = valueIdentifiers[i];
-			std::transform(lowerIdentifier.begin(), lowerIdentifier.end(), lowerIdentifier.begin(), ::tolower);
-			std::string lowerSearch = search;
-			std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), ::tolower);
-			matchesSearchVector[i] = lowerIdentifier.find(lowerSearch) != std::string::npos;
-			matchesSearch = matchesSearch || matchesSearchVector[i];
-		}
+		auto containsPattern = [&](std::string_view h) { return LowerContains(h, pattern); };
+		std::ranges::transform(identifiers, identifiersMatchesSearch.begin(), containsPattern);
+		matchesSearch = containsPattern(name) || std::ranges::any_of(identifiersMatchesSearch, std::identity{});
 	}
 
 	MAKE_COPY_PASTE(BoolListSetting)
@@ -1217,14 +1205,13 @@ public:
 			s->UpdateFromJson(json);
 	}
 
-	virtual inline void UpdateSearch(std::string search) override
+	virtual inline void UpdateSearch(std::string_view pattern) override
 	{
-		matchesSearch = false;
-		matchesSearch = matchesSearch || Matches(search);
+		matchesSearch = LowerContains(name, pattern);
 		for (const auto& s : subSettings)
 		{
-			s->UpdateSearch(search);
-			matchesSearch = matchesSearch || s->GetMatchesSearch();
+			s->UpdateSearch(pattern);
+			matchesSearch |= s->GetMatchesSearch();
 		}
 	}
 
@@ -1330,21 +1317,26 @@ protected:
 		}
 	}
 
+	inline void RenderSettings()
+	{
+		for (const auto& s : settings)
+		{
+			if (!s->GetMatchesSearch())
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			s->RenderImGui();
+			if (!s->GetMatchesSearch())
+				ImGui::PopStyleVar();
+		}
+	}
+
 public:
 	inline virtual void RenderImGui(bool& open)
 	{
 		UpdateBounds();
 
-		if (ImGui::Begin(this->name.c_str(), &open))
+		if (ImGui::Begin(name.c_str(), &open))
 		{
-			for (const auto& s : settings)
-			{
-				if (!s->GetMatchesSearch())
-					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-				s->RenderImGui();
-				if (!s->GetMatchesSearch())
-					ImGui::PopStyleVar();
-			}
+			RenderSettings();
 		}
 		ImGui::End();
 	}
@@ -1352,9 +1344,7 @@ public:
 	inline void ResetDefaults()
 	{
 		for (const auto& s : settings)
-		{
 			s->ReloadDefault();
-		}
 	}
 
 	inline std::string GetName() const
@@ -1362,7 +1352,7 @@ public:
 		return name;
 	}
 
-	inline void UpdateSearch(std::string search)
+	inline void UpdateSearch(std::string_view search)
 	{
 		for (const auto& s : settings)
 			s->UpdateSearch(search);
@@ -1379,7 +1369,7 @@ public:
 			s->ChangesAsJson(json);
 	}
 
-	inline void UpdateFromJson(nlohmann::json json)
+	inline void UpdateFromJson(const nlohmann::json& json)
 	{
 		for (const auto& s : settings)
 			s->UpdateFromJson(json);
@@ -1391,8 +1381,7 @@ public:
 			s->Visit(f);
 	}
 
-	template <typename T>
-	requires std::is_base_of_v<Setting, T>
+	template <std::derived_from<Setting> T>
 	inline T& GetSetting(std::string_view name) const
 	{
 		for (const auto& s : settings)
@@ -1408,7 +1397,7 @@ class UiModule : public Module
 {
 	bool requestResetLayout = false;
 	bool searchChanged = false;
-	char searchBuffer[100]{};
+	std::array<char, 100> searchBuffer{};
 
 public:
 	using Module::Module;
@@ -1421,18 +1410,11 @@ public:
 		{
 			ImGui::PushID(ID::nextID());
 			ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::InputTextWithHint("", "Search...", searchBuffer, sizeof(searchBuffer)))
+			if (ImGui::InputTextWithHint("", "Search...", searchBuffer.data(), searchBuffer.size()))
 				searchChanged = true;
 			ImGui::PopID();
 
-			for (const auto& setting : settings)
-			{
-				if (!setting->GetMatchesSearch())
-					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-				setting->RenderImGui();
-				if (!setting->GetMatchesSearch())
-					ImGui::PopStyleVar();
-			}
+			RenderSettings();
 
 			ImGui::PushID(ID::nextID());
 			if (ImGui::Button("reset layout"))
@@ -1453,9 +1435,9 @@ public:
 		return std::exchange(searchChanged, false);
 	}
 
-	inline std::string GetSearch() const
+	inline std::string_view GetSearch() const
 	{
-		return std::string(searchBuffer);
+		return searchBuffer.data();
 	}
 
 	inline FloatSetting& GetInputWidth() const {
