@@ -15,14 +15,24 @@ extern "C"
         memcpy(dst, src, size);
     }
 
+    VOID CALLBACK WinEventProcCallback(HWINEVENTHOOK hWinEventHook, DWORD dwEvent, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
+    {
+        if (dwEvent == EVENT_SYSTEM_FOREGROUND || dwEvent == EVENT_SYSTEM_MINIMIZEEND)
+        {
+            Global::foregroundHwnd = hwnd;
+        }
+    }
+
     __declspec(dllexport) void __cdecl SetGameHwnd(HWND hwnd)
     {
         Global::gameHwnd = hwnd;
+        Global::hhkWinEvent = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, NULL, WinEventProcCallback, 0, 0, WINEVENT_OUTOFCONTEXT);
+        Global::foregroundHwnd = GetForegroundWindow();
     }
 
     __declspec(dllexport) int32_t __cdecl IsGameFocused()
     {
-        return Global::gameHwnd == GetForegroundWindow();
+        return Global::gameHwnd == Global::foregroundHwnd;
     }
 
     __declspec(dllexport) void __cdecl InitializeImGui_d3d11(IDXGISwapChain* swapChain)

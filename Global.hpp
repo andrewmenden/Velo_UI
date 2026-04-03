@@ -40,13 +40,16 @@ namespace Global
 	// Game's window handle
 	inline HWND gameHwnd = NULL;
 
+	// Foreground window handle
+	inline HWND foregroundHwnd = NULL;
+
 	// d3d11 handles
-	ID3D11Device* deviced3d11 = NULL;
-	ID3D11DeviceContext* deviceContext = nullptr;
-	IDXGISwapChain* swapChain = nullptr;
+	inline ID3D11Device* deviced3d11 = NULL;
+	inline ID3D11DeviceContext* deviceContext = nullptr;
+	inline IDXGISwapChain* swapChain = nullptr;
 
 	// Graphics device type (either d3d11 or OpenGL)
-	GraphicsDeviceType graphicsDeviceType = gdtNONE;
+	inline GraphicsDeviceType graphicsDeviceType = gdtNONE;
 
 	// Game's window was dragged
 	inline bool windowDragged = false;
@@ -58,9 +61,10 @@ namespace Global
 	inline std::array<bool, 17> gamePadButtonsDown{};
 
 	// Hooks
-	HHOOK hhkLLKeyboard = NULL;
-	HHOOK hhkLLMouse = NULL;
-	HHOOK hhkCallWndProc = NULL;
+	inline HHOOK hhkLLKeyboard = NULL;
+	inline HHOOK hhkLLMouse = NULL;
+	inline HHOOK hhkCallWndProc = NULL;
+	inline HWINEVENTHOOK hhkWinEvent = NULL;
 }
 
 #endif
