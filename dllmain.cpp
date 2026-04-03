@@ -4,8 +4,6 @@
 // interface functions for communication between Velo.dll and Velo_UI.dll
 // note that there are also a couple of utility functions that don't have anything to do with the settings UI
 
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
 extern "C"
 {
     // Called once at the very beginning to check whether the necessary 
@@ -35,9 +33,8 @@ extern "C"
         Global::deviced3d11->GetImmediateContext(&Global::deviceContext);
         DXGI_SWAP_CHAIN_DESC sd;
         swapChain->GetDesc(&sd);
-        Global::gameHwnd = sd.OutputWindow;
         ImGui::CreateContext();
-        ImGui_ImplWin32_Init(Global::gameHwnd);
+        ImGui_ImplSDL2_InitForD3D(SDL_GetWindowFromID(1));
         ImGui_ImplDX11_Init(Global::deviced3d11, Global::deviceContext);
         Global::app.Init();
     }
@@ -68,7 +65,7 @@ extern "C"
         {
         case gdtD3D11:
             ImGui_ImplDX11_NewFrame();
-            ImGui_ImplWin32_NewFrame();
+            ImGui_ImplSDL2_NewFrame();
             break;
         case gdtOPENGL3:
             ImGui_ImplOpenGL3_NewFrame();
@@ -101,7 +98,7 @@ extern "C"
         {
         case gdtD3D11:
             ImGui_ImplDX11_Shutdown();
-            ImGui_ImplWin32_Shutdown();
+            ImGui_ImplSDL2_Shutdown();
             break;
         case gdtOPENGL3:
             ImGui_ImplOpenGL3_Shutdown();
@@ -113,15 +110,6 @@ extern "C"
 
     __declspec(dllexport) void __cdecl ProcessEvent(SDL_Event *event)
     {
-        if (event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP)
-            event->button.windowID = (Uint32)Global::gameHwnd;
-        if (event->type == SDL_MOUSEWHEEL)
-            event->wheel.windowID = (Uint32)Global::gameHwnd;
-        if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP)
-            event->key.windowID = (Uint32)Global::gameHwnd;
-        if (event->type == SDL_TEXTINPUT)
-            event->text.windowID = (Uint32)Global::gameHwnd;
-
         ImGui_ImplSDL2_ProcessEvent(event);
     }
 
