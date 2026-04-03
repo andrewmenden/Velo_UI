@@ -46,7 +46,7 @@ enum SettingType : int
 
 constexpr bool LowerContains(std::string_view haystack, std::string_view pattern)
 {
-	constexpr auto toLower = [](char c) { return std::tolower(c); };
+	constexpr auto toLower = [](char c) { return std::tolower(static_cast<unsigned char>(c)); };
 
 	return 
 		pattern.empty() || 

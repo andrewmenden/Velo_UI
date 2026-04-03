@@ -147,7 +147,8 @@ public:
 		if (uiModule->IsRequestingResetLayout())
 			ResetLayout();
 
-		pendingChanges.insert(cycle.changes.begin(), cycle.changes.end());
+		for (auto& c : cycle.changes)
+			pendingChanges.push_back(std::move(c));
 		cycle.changes.clear();
 	}
 
