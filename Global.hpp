@@ -28,15 +28,6 @@ namespace Global
 	// Game's window size, updated on every frame via the RenderImGui function
 	inline ImVec2 windowSize{};
 
-	// Settings input width, updates on every frame
-	inline float inputWidth{};
-
-	// UI toggle key, updates on every frame
-	inline int enableUiKey{};
-
-	// True if any setting has changed
-	inline bool settingChanged{};
-
 	// Game's window handle
 	inline HWND gameHwnd = NULL;
 

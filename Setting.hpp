@@ -16,13 +16,13 @@ inline std::unique_ptr<Setting> Copy() const override \
 { \
 	return std::unique_ptr<Setting>(new T(*this)); \
 } \
-inline void Paste(Setting* setting) override \
+inline void Paste(Setting* setting, Cycle& cycle) override \
 { \
-	SetChanged(); \
 	if (T* s = dynamic_cast<T*>(setting)) \
 	{ \
 		value = s->value; \
 	} \
+	AddChange(cycle); \
 }
 
 enum SettingType : int
@@ -60,12 +60,16 @@ inline std::array<char, MAX_PATH> stringBuffer{};
 class Setting;
 
 std::unique_ptr<Setting> JsonToSetting(const nlohmann::json&);
+
+struct Cycle
+{
+	nlohmann::json changes;
+	float inputWidth;
+	uint16_t enableUiHotkey;
+};
 	
 class Setting
 {
-private:
-	bool changed = false;
-	
 protected:
 	bool matchesSearch = true;
 	std::string name;
@@ -82,22 +86,6 @@ public:
 
 	virtual ~Setting() = default;
 
-	inline bool HasChanged() const
-	{
-		return changed;
-	}
-
-	inline void SetChanged()
-	{
-		changed = true;
-		Global::settingChanged = true;
-	}
-
-	inline void ResetChanged()
-	{
-		changed = false;
-	}
-
 	inline bool GetMatchesSearch() const
 	{
 		return matchesSearch;
@@ -113,17 +101,12 @@ public:
 		return name;
 	}
 
-	virtual inline void Visit(const std::function<void(Setting*)>& f)
-	{
-		f(this);
-	}
-
-	virtual void RenderImGui() = 0;
+	virtual void RenderImGui(Cycle&) = 0;
 
 protected:
 	// right clicking setting labels allows you to copy/paste settings
 	// with shift is copy and without shift is paste
-	inline void CheckCopyPaste()
+	inline void CheckCopyPaste(Cycle& cycle)
 	{
 		if (ImGui::IsItemClicked(1))
 		{
@@ -134,31 +117,30 @@ protected:
 			}
 			else if (clipboard)
 			{
-				Paste(clipboard.get());
+				Paste(clipboard.get(), cycle);
 			}
 		}
 	}
 
-	inline void RenderLabel()
+	inline void RenderLabel(Cycle& cycle)
 	{
 		ImGui::SameLine();
 		ImGui::Text(name.c_str());
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(tooltip.c_str());
-		CheckCopyPaste();
+		CheckCopyPaste(cycle);
 	}
 
 public:
-	virtual void ReloadDefault() = 0;
+	virtual void ReloadDefault(Cycle&) = 0;
 
-	virtual void ChangesAsJson(nlohmann::json& json) = 0;
-	virtual void UpdateFromJson(const nlohmann::json& data) = 0;
+	virtual void UpdateFromJson(const nlohmann::json&) = 0;
 
 	virtual SettingType GetType() = 0;
 
 	virtual std::unique_ptr<Setting> Copy() const = 0;
 
-	virtual void Paste(Setting* setting) = 0;
+	virtual void Paste(Setting*, Cycle&) = 0;
 };
 
 template <typename T> requires
@@ -214,21 +196,18 @@ public:
 		this->value = value;
 	}
 
-	inline virtual void ReloadDefault() override
+	inline void AddChange(Cycle& cycle) const
 	{
-		value = defaultValue;
-		SetChanged();
+		nlohmann::json json;
+		json["ID"] = id;
+		json["Value"] = value;
+		cycle.changes.push_back(std::move(json));
 	}
 
-	inline virtual void ChangesAsJson(nlohmann::json& json) override
+	inline virtual void ReloadDefault(Cycle& cycle) override
 	{
-		if (HasChanged())
-		{
-			nlohmann::json temp;
-			temp["ID"] = id;
-			temp["Value"] = value;
-			json.push_back(temp);
-		}
+		value = defaultValue;
+		AddChange(cycle);
 	}
 
 	inline virtual void UpdateFromJson(const nlohmann::json& json) override
@@ -258,14 +237,14 @@ public:
 		min{ json["Min"] },
 		max{ json["Max"] } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		if (ImGui::DragInt("", &value, (max - min) / divideRange, min, max, "%d", ImGuiSliderFlags_None))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -291,14 +270,14 @@ public:
 		stepSize = (max - min) / divideRange;
 	}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		if (ImGui::DragFloat("", &value, stepSize, min, max, "%.2f"))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -315,13 +294,13 @@ public:
 	inline BoolSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::PushID(ID::nextID());
 		if (ImGui::Checkbox("", &value))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -366,7 +345,7 @@ public:
 	inline ToggleSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		if (value.hotkey != previousHotkey)
 		{
@@ -374,7 +353,7 @@ public:
 			previousHotkey = value.hotkey;
 		}
 
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		ImGui::InputText("", keyName.data(), keyName.size(), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo);
 		ImGui::PopID();
@@ -384,11 +363,11 @@ public:
 			if (ImGui::IsKeyDown(ImGuiKey_MouseRight))
 			{
 				value.hotkey = unmappedKey;
-				SetChanged();
+				AddChange(cycle);
 			}
 			else
 			{
-				int k = getPressedKey(Global::enableUiKey);
+				int k = getPressedKey(cycle.enableUiHotkey);
 				if (k != 0)
 				{
 					if (!wasPressed)
@@ -396,7 +375,7 @@ public:
 					if (std::chrono::high_resolution_clock::now() - pressTime >= std::chrono::milliseconds(500))
 						k |= modifierAny;
 					value.hotkey = k;
-					SetChanged();
+					AddChange(cycle);
 					pressed = true;
 				}
 			}
@@ -406,9 +385,9 @@ public:
 		ImGui::SameLine();
 		ImGui::PushID(ID::nextID());
 		if (ImGui::Checkbox("", &value.state))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -430,7 +409,7 @@ public:
 	inline HotkeySetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		if (value != previousValue)
 		{
@@ -438,7 +417,7 @@ public:
 			previousValue = value;
 		}
 
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		ImGui::InputText("", keyName.data(), keyName.size(), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo);
 		ImGui::PopID();
@@ -448,11 +427,11 @@ public:
 			if (ImGui::IsKeyDown(ImGuiKey_MouseRight))
 			{
 				value = unmappedKey;
-				SetChanged();
+				AddChange(cycle);
 			}
 			else
 			{
-				int k = getPressedKey(Global::enableUiKey);
+				int k = getPressedKey(cycle.enableUiHotkey);
 				if (k != 0)
 				{
 					if (!wasPressed)
@@ -460,13 +439,13 @@ public:
 					if (std::chrono::high_resolution_clock::now() - pressTime >= std::chrono::milliseconds(500))
 						k |= modifierAny;
 					value = k;
-					SetChanged();
+					AddChange(cycle);
 					pressed = true;
 				}
 			}
 		}
 		wasPressed = pressed;
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -516,20 +495,20 @@ public:
 		stepSize.y = (max.y - min.y) / divideRange;
 	}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		if (ImGui::DragFloat("##value_x", &value.x, stepSize.x, min.x, max.x, "%.2f"))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		ImGui::SameLine();
 		if (ImGui::DragFloat("##value_y", &value.y, stepSize.y, min.y, max.y, "%.2f"))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -546,18 +525,18 @@ public:
 	inline StringSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		strcpy_s(stringBuffer.data(), stringBuffer.size(), value.c_str());
 		if (ImGui::InputText("", stringBuffer.data(), stringBuffer.size()))
 		{
 			value = stringBuffer.data();
-			SetChanged();
+			AddChange(cycle);
 		}
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -591,9 +570,9 @@ public:
 	inline RoundingMultiplierSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		strcpy_s(stringBuffer.data(), stringBuffer.size(), value.c_str());
 		if (ImGui::InputText("", stringBuffer.data(), stringBuffer.size()))
@@ -601,11 +580,11 @@ public:
 			if (IsValid(stringBuffer.data()))
 			{
 				value = stringBuffer.data();
-				SetChanged();
+				AddChange(cycle);
 			}
 		}
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -630,7 +609,7 @@ public:
 		identifiersMatchesSearch(value.size(), true),
 		collapsing{ json["Collapsing"] } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		if (!collapsing)
 		{
@@ -642,7 +621,7 @@ public:
 					ImGui::PushID(ID::nextID());
 					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 					if (ImGui::Checkbox(identifiers[i].c_str(), &v))
-						SetChanged();
+						AddChange(cycle);
 					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PopStyleVar();
 					ImGui::PopID();
 
@@ -658,13 +637,13 @@ public:
 				if (ImGui::Button("show all"))
 				{
 					std::ranges::fill(value, true);
-					SetChanged();
+					AddChange(cycle);
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("hide all"))
 				{
 					std::ranges::fill(value, false);
-					SetChanged();
+					AddChange(cycle);
 				}
 				size_t i = 0;
 				for (bool& v : value)
@@ -674,7 +653,7 @@ public:
 					if (ImGui::MenuItem(identifiers[i].c_str(), nullptr, v))
 					{
 						v = !v;
-						SetChanged();
+						AddChange(cycle);
 					}
 					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PopStyleVar();
 					ImGui::PopID();
@@ -710,9 +689,9 @@ public:
 	inline StringListSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		if (ImGui::BeginCombo("", name.c_str()))
 		{
@@ -725,7 +704,10 @@ public:
 				std::string_view entered = buffer.data();
 
 				if (!entered.empty() && std::ranges::find(value, entered) == value.end())
+				{
 					value.emplace_back(entered);
+					AddChange(cycle);
+				}
 			}
 			ImGui::PopID();
 			auto remove = value.end();
@@ -739,7 +721,7 @@ public:
 			if (remove != value.end())
 			{
 				value.erase(remove);
-				SetChanged();
+				AddChange(cycle);
 			}
 			ImGui::EndCombo();
 		}
@@ -765,9 +747,9 @@ public:
 		SettingOfType{ json },
 		identifiers{ json["Identifiers"].get<std::vector<std::string>>() } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		if (ImGui::BeginCombo(name.c_str(), identifiers[value].c_str()))
 		{
 			size_t i = 0;
@@ -775,7 +757,7 @@ public:
 			{
 				ImGui::PushID(ID::nextID());
 				if (ImGui::RadioButton(a.c_str(), &value, i++))
-					SetChanged();
+					AddChange(cycle);
 				ImGui::PopID();
 			}
 			ImGui::EndCombo();
@@ -826,19 +808,19 @@ public:
 	inline ColorSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::PushID(ID::nextID());
-		ImGui::SetNextItemWidth(9.0f / 5.0f * Global::inputWidth);
+		ImGui::SetNextItemWidth(9.0f / 5.0f * cycle.inputWidth);
 		if (ImGui::ColorEdit3("", value.arr.data(), ImGuiColorEditFlags_NoSmallPreview))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
 		ImGui::SameLine();
 		ImGui::PushID(ID::nextID());
 		if (ImGui::ColorEdit4("", value.arr.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -941,26 +923,26 @@ public:
 		SettingOfType{ json }
 	{}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		//enableAdvanced - RGB - Color - Label
 		ImGui::PushID(ID::nextID());
 		if (ImGui::Checkbox("", &value.advanced))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
 		ImGui::SetItemTooltip("enable advanced color edit");
 		ImGui::SameLine();
 		if (!value.advanced)
 		{
 			ImGui::PushID(ID::nextID());
-			ImGui::SetNextItemWidth(9.0f / 5.0f * Global::inputWidth);
+			ImGui::SetNextItemWidth(9.0f / 5.0f * cycle.inputWidth);
 			if (ImGui::ColorEdit3("", value.colors.front().arr.data(), ImGuiColorEditFlags_NoSmallPreview))
-				SetChanged();
+				AddChange(cycle);
 			ImGui::PopID();
 			ImGui::SameLine();
 			ImGui::PushID(ID::nextID());
 			if (ImGui::ColorEdit4("", value.colors.front().arr.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
-				SetChanged();
+				AddChange(cycle);
 			ImGui::PopID();
 		}
 		else //advanced mode :(
@@ -970,36 +952,36 @@ public:
 			float height = lineHeight + 2 * padding;
 
 			if (value.discrete)
-				DrawFullDiscrete(Global::inputWidth, height);
+				DrawFullDiscrete(cycle.inputWidth, height);
 			else
-				DrawFullGradient(Global::inputWidth, height);
+				DrawFullGradient(cycle.inputWidth, height);
 			ImGui::PushID(ID::nextID());
-			ImGui::PushItemWidth(Global::inputWidth);
+			ImGui::PushItemWidth(cycle.inputWidth);
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{ 0.0f, 0.0f, 0.0f, 0.0f });
 			ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{ 0.0f, 0.0f, 0.0f, 0.0f });
 			if (ImGui::BeginCombo("", "", ImGuiComboFlags_NoArrowButton))
 			{
 				ImGui::PopStyleColor(2);
-				ImGui::SetNextItemWidth(Global::inputWidth);
+				ImGui::SetNextItemWidth(cycle.inputWidth);
 				ImGui::PushID(ID::nextID());
 				if (ImGui::Checkbox("discrete", &value.discrete))
-					SetChanged();
+					AddChange(cycle);
 				ImGui::PopID();
-				ImGui::SetNextItemWidth(Global::inputWidth);
+				ImGui::SetNextItemWidth(cycle.inputWidth);
 				ImGui::PushID(ID::nextID());
 				if (ImGui::DragInt("period", &value.period, 5000 / divideRange, 0, 5000))
-					SetChanged();
+					AddChange(cycle);
 				ImGui::PopID();
-				ImGui::SetNextItemWidth(Global::inputWidth);
+				ImGui::SetNextItemWidth(cycle.inputWidth);
 				ImGui::PushID(ID::nextID());
 				if (ImGui::DragInt("offset", &value.offset, 5000 / divideRange, 0, 5000))
-					SetChanged();
+					AddChange(cycle);
 				ImGui::PopID();
 				ImGui::PushID(ID::nextID());
 				if (ImGui::Button("add color"))
 				{
 					value.colors.push_back(Color{ 1.0, 1.0, 1.0, 1.0 });
-					SetChanged();
+					AddChange(cycle);
 				}
 				ImGui::PopID();
 
@@ -1008,7 +990,7 @@ public:
 				{
 					ImGui::PushID(ID::nextID());
 					if (ImGui::ColorEdit4("", it->arr.data(), ImGuiColorEditFlags_NoInputs))
-						SetChanged();
+						AddChange(cycle);
 					if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && value.colors.size() > 1)
 						remove = it;
 					ImGui::PopID();
@@ -1017,7 +999,7 @@ public:
 				if (remove != value.colors.end())
 				{
 					value.colors.erase(remove);
-					SetChanged();
+					AddChange(cycle);
 				}
 
 				ImGui::EndCombo();
@@ -1026,7 +1008,7 @@ public:
 				ImGui::PopStyleColor(2);
 			ImGui::PopID();
 		}
-		RenderLabel();
+		RenderLabel(cycle);
 	}
 
 	inline SettingType GetType() override
@@ -1066,27 +1048,27 @@ public:
 	inline InputBoxSetting(const nlohmann::json& json) :
 		SettingOfType{ json } {}
 
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::NewLine();
-		RenderLabel();
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		RenderLabel(cycle);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		strcpy_s(stringBuffer.data(), stringBuffer.size(), value.label.c_str());
 		if (ImGui::InputText("label", stringBuffer.data(), stringBuffer.size()))
 		{
 			value.label = stringBuffer.data();
-			SetChanged();
+			AddChange(cycle);
 		}
 		ImGui::PopID();
 
-		ImGui::SetNextItemWidth(Global::inputWidth);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		ImGui::PushID(ID::nextID());
 		if (ImGui::DragInt2("position", value.position.data()))
-			SetChanged();
-		ImGui::SetNextItemWidth(Global::inputWidth);
+			AddChange(cycle);
+		ImGui::SetNextItemWidth(cycle.inputWidth);
 		if (ImGui::DragInt2("size", value.size.data(), 1, 0, 1 << (31 - 1)))
-			SetChanged();
+			AddChange(cycle);
 		ImGui::PopID();
 	}
 
@@ -1120,20 +1102,12 @@ public:
 			subSettings.push_back(s->Copy());
 	}
 
-	virtual void Visit(const std::function<void(Setting*)>& f) override
-	{
-		f(this);
-		for (const auto& s : subSettings)
-			s->Visit(f);
-	}
-
-
 private:
 #pragma warning(push)
 #pragma warning(disable : 4068)
 #pragma diag_suppress 27
 #pragma warning(pop)
-	inline void RenderReset()
+	inline void RenderReset(Cycle& cycle)
 	{
 		bool hasScroll = ImGui::GetCurrentWindow()->ScrollbarY;
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 1, 1, 1, 0.0f });
@@ -1147,7 +1121,7 @@ private:
 		ImGui::SetWindowFontScale(0.75f);
 		ImGui::PushID(ID::nextID());
 		if (ImGui::Button((const char*)u8"\xe800", ImVec2(temp, temp)))
-			ReloadDefault();
+			ReloadDefault(cycle);
 		ImGui::PopID();
 		if (ImGui::IsItemHovered())
 		{
@@ -1158,7 +1132,7 @@ private:
 	}
 
 public:
-	inline void RenderImGui() override
+	inline void RenderImGui(Cycle& cycle) override
 	{
 		u8"\xe800";
 		ImGui::SetWindowFontScale(1.0f);
@@ -1166,13 +1140,13 @@ public:
 		{
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(tooltip.c_str());
-			CheckCopyPaste();
-			RenderReset();
+			CheckCopyPaste(cycle);
+			RenderReset(cycle);
 			for (const auto& a : subSettings)
 			{
 				if (!a->GetMatchesSearch() && matchesSearch)
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-				a->RenderImGui();
+				a->RenderImGui(cycle);
 				if (!a->GetMatchesSearch() && matchesSearch)
 					ImGui::PopStyleVar();
 			}
@@ -1182,21 +1156,15 @@ public:
 		{
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(tooltip.c_str());
-			CheckCopyPaste();
-			RenderReset();
+			CheckCopyPaste(cycle);
+			RenderReset(cycle);
 		}
 	}
 
-	inline void ReloadDefault() override
+	inline void ReloadDefault(Cycle& cycle) override
 	{
 		for (const auto& s : subSettings)
-			s->ReloadDefault();
-	}
-
-	inline void ChangesAsJson(nlohmann::json& json) override
-	{
-		for (const auto& s : subSettings)
-			s->ChangesAsJson(json);
+			s->ReloadDefault(cycle);
 	}
 
 	void UpdateFromJson(const nlohmann::json& json) override
@@ -1225,7 +1193,7 @@ public:
 		return std::unique_ptr<Setting>{ new CategorySetting(*this) };
 	}
 
-	inline bool pasteCompatible(CategorySetting* setting)
+	inline bool PasteCompatible(CategorySetting* setting)
 	{
 		if (subSettings.size() != setting->subSettings.size())
 			return false;
@@ -1234,21 +1202,20 @@ public:
 			if ((*it1)->GetType() != (*it2)->GetType())
 				return false;
 			if ((*it1)->GetType() == stCategory)
-				return dynamic_cast<CategorySetting*>(it1->get())->pasteCompatible(dynamic_cast<CategorySetting*>(it2->get()));
+				return dynamic_cast<CategorySetting*>(it1->get())->PasteCompatible(dynamic_cast<CategorySetting*>(it2->get()));
 		}
 		return true;
 	}
 
-	inline void Paste(Setting* setting) override
+	inline void Paste(Setting* setting, Cycle& cycle) override
 	{
-		SetChanged();
 		if (CategorySetting* s = dynamic_cast<CategorySetting*>(setting))
 		{
-			if (pasteCompatible(s))
+			if (PasteCompatible(s))
 			{
 				for (size_t i = 0; i < subSettings.size(); i++)
 				{
-					subSettings[i]->Paste(s->subSettings[i].get());
+					subSettings[i]->Paste(s->subSettings[i].get(), cycle);
 				}
 			}
 		}
@@ -1317,34 +1284,34 @@ protected:
 		}
 	}
 
-	inline void RenderSettings()
+	inline void RenderSettings(Cycle& cycle)
 	{
 		for (const auto& s : settings)
 		{
 			if (!s->GetMatchesSearch())
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-			s->RenderImGui();
+			s->RenderImGui(cycle);
 			if (!s->GetMatchesSearch())
 				ImGui::PopStyleVar();
 		}
 	}
 
 public:
-	inline virtual void RenderImGui(bool& open)
+	inline virtual void RenderImGui(bool& open, Cycle& cycle)
 	{
 		UpdateBounds();
 
 		if (ImGui::Begin(name.c_str(), &open))
 		{
-			RenderSettings();
+			RenderSettings(cycle);
 		}
 		ImGui::End();
 	}
 
-	inline void ResetDefaults()
+	inline void ResetDefaults(Cycle& cycle)
 	{
 		for (const auto& s : settings)
-			s->ReloadDefault();
+			s->ReloadDefault(cycle);
 	}
 
 	inline std::string GetName() const
@@ -1363,22 +1330,10 @@ public:
 		settings.push_back(std::move(setting));
 	}
 
-	inline void ChangesAsJson(nlohmann::json& json) const
-	{
-		for (const auto& s : settings)
-			s->ChangesAsJson(json);
-	}
-
 	inline void UpdateFromJson(const nlohmann::json& json)
 	{
 		for (const auto& s : settings)
 			s->UpdateFromJson(json);
-	}
-
-	inline void Visit(const std::function<void(Setting*)>& f)
-	{
-		for (const auto& s : settings)
-			s->Visit(f);
 	}
 
 	template <std::derived_from<Setting> T>
@@ -1402,7 +1357,7 @@ class UiModule : public Module
 public:
 	using Module::Module;
 
-	inline virtual void RenderImGui(bool&) override
+	inline virtual void RenderImGui(bool&, Cycle& cycle) override
 	{
 		UpdateBounds();
 
@@ -1414,7 +1369,7 @@ public:
 				searchChanged = true;
 			ImGui::PopID();
 
-			RenderSettings();
+			RenderSettings(cycle);
 
 			ImGui::PushID(ID::nextID());
 			if (ImGui::Button("reset layout"))

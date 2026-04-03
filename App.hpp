@@ -27,6 +27,7 @@ class App
 private:
 	std::vector<std::unique_ptr<Module>> modules; // modules[0] is always the UI module
 	UiModule* uiModule = nullptr;
+	Cycle cycle{};
 
 	bool firstRender = true;
 
@@ -117,10 +118,10 @@ public:
 		ImGui::End();
 
 		bool dummy;
-		uiModule->RenderImGui(dummy);
+		uiModule->RenderImGui(dummy, cycle);
 
-		Global::inputWidth = uiModule->GetInputWidth().GetValue();
-		Global::enableUiKey = uiModule->GetEnabled().GetValue().hotkey;
+		cycle.inputWidth = uiModule->GetInputWidth().GetValue();
+		cycle.enableUiHotkey = uiModule->GetEnabled().GetValue().hotkey;
 
 		if (uiModule->GetSearchChanged())
 		{
@@ -134,21 +135,15 @@ public:
 		{
 			bool wasEnabled = *enabledIt;
 			if (*enabledIt)
-				m->RenderImGui(*enabledIt);
+				m->RenderImGui(*enabledIt, cycle);
 			if (*enabledIt != wasEnabled)
-				uiModule->GetWindows().SetChanged();
+				uiModule->GetWindows().AddChange(cycle);
 
 			++enabledIt;
 		}
 
 		if (uiModule->IsRequestingResetLayout())
 			ResetLayout();
-	}
-
-	inline void ChangesAsJson(nlohmann::json& json)
-	{
-		for (const auto& m : modules)
-			m->ChangesAsJson(json);
 	}
 
 	inline void UpdateFromJson(const nlohmann::json& json)
@@ -159,17 +154,11 @@ public:
 
 	inline std::string ChangesAsJsonString()
 	{
-		if (Global::settingChanged)
+		if (!cycle.changes.empty())
 		{
-			Global::settingChanged = false;
-			nlohmann::json temp;
-
-			ChangesAsJson(temp);
-			for (auto& m : modules)
-				m->Visit([](Setting* s) { s->ResetChanged(); });
-
 			nlohmann::json json;
-			json["Changes"] = temp;
+			json["Changes"] = std::move(cycle.changes);
+			cycle.changes.clear();
 			return json.dump(0);
 		}
 		return "";
