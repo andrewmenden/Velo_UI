@@ -21,9 +21,6 @@
     <ClInclude Include="Setting.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ID.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Keys.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

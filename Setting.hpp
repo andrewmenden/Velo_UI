@@ -6,7 +6,6 @@
 #include <json.hpp>
 
 #include "BoolVector.hpp"
-#include "ID.hpp"
 #include "Keys.hpp"
 #include "Packing.hpp"
 #include "Global.hpp"
@@ -66,6 +65,17 @@ struct Cycle
 	nlohmann::json changes;
 	float inputWidth = 70.0f;
 	uint16_t enableUiHotkey;
+	int nextId = 0;
+
+	inline int NextId()
+	{
+		return nextId++;
+	}
+
+	inline void Reset()
+	{
+		nextId = 0;
+	}
 };
 	
 class Setting
@@ -124,10 +134,17 @@ protected:
 
 	inline void RenderLabel(Cycle& cycle)
 	{
+		//ImGui::PushID("test");
 		ImGui::SameLine();
+		//ImGui::PopID();
 		ImGui::Text(name.c_str());
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(tooltip.c_str());
+		/*if (ImGui::BeginPopupContextItem("test"))
+		{
+			ImGui::Text("hi");
+			ImGui::EndPopup();
+		}*/
 		CheckCopyPaste(cycle);
 	}
 
@@ -240,7 +257,7 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::DragInt("", &value, (max - min) / divideRange, min, max, "%d", ImGuiSliderFlags_None))
 			AddChange(cycle);
 		ImGui::PopID();
@@ -273,7 +290,7 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::DragFloat("", &value, stepSize, min, max, "%.2f"))
 			AddChange(cycle);
 		ImGui::PopID();
@@ -296,7 +313,7 @@ public:
 
 	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::Checkbox("", &value))
 			AddChange(cycle);
 		ImGui::PopID();
@@ -354,7 +371,7 @@ public:
 		}
 
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		ImGui::InputText("", keyName.data(), keyName.size(), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo);
 		ImGui::PopID();
 		bool pressed = false;
@@ -383,7 +400,7 @@ public:
 
 		wasPressed = pressed;
 		ImGui::SameLine();
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::Checkbox("", &value.state))
 			AddChange(cycle);
 		ImGui::PopID();
@@ -418,7 +435,7 @@ public:
 		}
 
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		ImGui::InputText("", keyName.data(), keyName.size(), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo);
 		ImGui::PopID();
 		bool pressed = false;
@@ -498,12 +515,12 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::DragFloat("##value_x", &value.x, stepSize.x, min.x, max.x, "%.2f"))
 			AddChange(cycle);
 		ImGui::PopID();
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		ImGui::SameLine();
 		if (ImGui::DragFloat("##value_y", &value.y, stepSize.y, min.y, max.y, "%.2f"))
 			AddChange(cycle);
@@ -528,7 +545,7 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		strcpy_s(stringBuffer.data(), stringBuffer.size(), value.c_str());
 		if (ImGui::InputText("", stringBuffer.data(), stringBuffer.size()))
 		{
@@ -573,7 +590,7 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		strcpy_s(stringBuffer.data(), stringBuffer.size(), value.c_str());
 		if (ImGui::InputText("", stringBuffer.data(), stringBuffer.size()))
 		{
@@ -618,7 +635,7 @@ public:
 				size_t i = 0;
 				for (bool& v : value)
 				{
-					ImGui::PushID(ID::nextID());
+					ImGui::PushID(cycle.NextId());
 					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 					if (ImGui::Checkbox(identifiers[i].c_str(), &v))
 						AddChange(cycle);
@@ -648,7 +665,7 @@ public:
 				size_t i = 0;
 				for (bool& v : value)
 				{
-					ImGui::PushID(ID::nextID());
+					ImGui::PushID(cycle.NextId());
 					if (!identifiersMatchesSearch[i] && matchesSearch) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 					if (ImGui::MenuItem(identifiers[i].c_str(), nullptr, v))
 					{
@@ -692,13 +709,13 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::BeginCombo("", name.c_str()))
 		{
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			ImGui::InputText("", buffer.data(), buffer.size());
 			ImGui::PopID();
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			if (ImGui::Button("+", ImVec2{ -1, 0 }))
 			{
 				std::string_view entered = buffer.data();
@@ -713,7 +730,7 @@ public:
 			auto remove = value.end();
 			for (auto it = value.begin(); it != value.end(); ++it)
 			{
-				ImGui::PushID(ID::nextID());
+				ImGui::PushID(cycle.NextId());
 				if (ImGui::Button((std::string("- ") + *it).c_str()))
 					remove = it;
 				ImGui::PopID();
@@ -755,7 +772,7 @@ public:
 			size_t i = 0;
 			for (const auto& a : identifiers)
 			{
-				ImGui::PushID(ID::nextID());
+				ImGui::PushID(cycle.NextId());
 				if (ImGui::RadioButton(a.c_str(), &value, i++))
 					AddChange(cycle);
 				ImGui::PopID();
@@ -810,13 +827,13 @@ public:
 
 	inline void RenderImGui(Cycle& cycle) override
 	{
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		ImGui::SetNextItemWidth(9.0f / 5.0f * cycle.inputWidth);
 		if (ImGui::ColorEdit3("", value.arr.data(), ImGuiColorEditFlags_NoSmallPreview))
 			AddChange(cycle);
 		ImGui::PopID();
 		ImGui::SameLine();
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::ColorEdit4("", value.arr.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
 			AddChange(cycle);
 		ImGui::PopID();
@@ -926,7 +943,7 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		//enableAdvanced - RGB - Color - Label
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::Checkbox("", &value.advanced))
 			AddChange(cycle);
 		ImGui::PopID();
@@ -934,13 +951,13 @@ public:
 		ImGui::SameLine();
 		if (!value.advanced)
 		{
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			ImGui::SetNextItemWidth(9.0f / 5.0f * cycle.inputWidth);
 			if (ImGui::ColorEdit3("", value.colors.front().arr.data(), ImGuiColorEditFlags_NoSmallPreview))
 				AddChange(cycle);
 			ImGui::PopID();
 			ImGui::SameLine();
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			if (ImGui::ColorEdit4("", value.colors.front().arr.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
 				AddChange(cycle);
 			ImGui::PopID();
@@ -955,7 +972,7 @@ public:
 				DrawFullDiscrete(cycle.inputWidth, height);
 			else
 				DrawFullGradient(cycle.inputWidth, height);
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			ImGui::PushItemWidth(cycle.inputWidth);
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{ 0.0f, 0.0f, 0.0f, 0.0f });
 			ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{ 0.0f, 0.0f, 0.0f, 0.0f });
@@ -963,21 +980,21 @@ public:
 			{
 				ImGui::PopStyleColor(2);
 				ImGui::SetNextItemWidth(cycle.inputWidth);
-				ImGui::PushID(ID::nextID());
+				ImGui::PushID(cycle.NextId());
 				if (ImGui::Checkbox("discrete", &value.discrete))
 					AddChange(cycle);
 				ImGui::PopID();
 				ImGui::SetNextItemWidth(cycle.inputWidth);
-				ImGui::PushID(ID::nextID());
+				ImGui::PushID(cycle.NextId());
 				if (ImGui::DragInt("period", &value.period, 5000 / divideRange, 0, 5000))
 					AddChange(cycle);
 				ImGui::PopID();
 				ImGui::SetNextItemWidth(cycle.inputWidth);
-				ImGui::PushID(ID::nextID());
+				ImGui::PushID(cycle.NextId());
 				if (ImGui::DragInt("offset", &value.offset, 5000 / divideRange, 0, 5000))
 					AddChange(cycle);
 				ImGui::PopID();
-				ImGui::PushID(ID::nextID());
+				ImGui::PushID(cycle.NextId());
 				if (ImGui::Button("add color"))
 				{
 					value.colors.push_back(Color{ 1.0, 1.0, 1.0, 1.0 });
@@ -988,7 +1005,7 @@ public:
 				auto remove = value.colors.end();
 				for (auto it = value.colors.begin(); it != value.colors.end(); ++it)
 				{
-					ImGui::PushID(ID::nextID());
+					ImGui::PushID(cycle.NextId());
 					if (ImGui::ColorEdit4("", it->arr.data(), ImGuiColorEditFlags_NoInputs))
 						AddChange(cycle);
 					if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && value.colors.size() > 1)
@@ -1053,7 +1070,7 @@ public:
 		ImGui::NewLine();
 		RenderLabel(cycle);
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		strcpy_s(stringBuffer.data(), stringBuffer.size(), value.label.c_str());
 		if (ImGui::InputText("label", stringBuffer.data(), stringBuffer.size()))
 		{
@@ -1063,7 +1080,7 @@ public:
 		ImGui::PopID();
 
 		ImGui::SetNextItemWidth(cycle.inputWidth);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::DragInt2("position", value.position.data()))
 			AddChange(cycle);
 		ImGui::SetNextItemWidth(cycle.inputWidth);
@@ -1119,7 +1136,7 @@ private:
 			ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetTextLineHeight() - ImGui::CalcTextSize((const char*)u8"\xe800").x); //2x for possible scroll bar
 		float temp = ImGui::GetTextLineHeight();
 		ImGui::SetWindowFontScale(0.75f);
-		ImGui::PushID(ID::nextID());
+		ImGui::PushID(cycle.NextId());
 		if (ImGui::Button((const char*)u8"\xe800", ImVec2(temp, temp)))
 			ReloadDefault(cycle);
 		ImGui::PopID();
@@ -1363,7 +1380,7 @@ public:
 
 		if (ImGui::Begin(name.c_str()))
 		{
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::InputTextWithHint("", "Search...", searchBuffer.data(), searchBuffer.size()))
 				searchChanged = true;
@@ -1371,7 +1388,7 @@ public:
 
 			RenderSettings(cycle);
 
-			ImGui::PushID(ID::nextID());
+			ImGui::PushID(cycle.NextId());
 			if (ImGui::Button("reset layout"))
 				requestResetLayout = true;
 			ImGui::PopID();

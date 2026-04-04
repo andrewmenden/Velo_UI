@@ -92,7 +92,7 @@ public:
 
 	inline void RenderImGui()
 	{
-		ID::resetID();
+		cycle.Reset();
 
 		if (firstRender)
 		{

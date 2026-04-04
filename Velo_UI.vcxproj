@@ -159,7 +159,6 @@
     <ClInclude Include="external\imgui\imstb_textedit.h" />
     <ClInclude Include="external\imgui\imstb_truetype.h" />
     <ClInclude Include="Global.hpp" />
-    <ClInclude Include="ID.hpp" />
     <ClInclude Include="external\json\json.hpp" />
     <ClInclude Include="Keys.hpp" />
     <ClInclude Include="Packing.hpp" />
