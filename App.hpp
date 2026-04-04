@@ -27,7 +27,7 @@ class App
 private:
 	std::vector<std::unique_ptr<Module>> modules; // modules[0] is always the UI module
 	UiModule* uiModule = nullptr;
-	nlohmann::json pendingChanges;
+	Cycle cycle;
 
 	bool firstRender = true;
 
@@ -92,8 +92,6 @@ public:
 
 	inline void RenderImGui()
 	{
-		Cycle cycle{};
-
 		ID::resetID();
 
 		if (firstRender)
@@ -103,7 +101,7 @@ public:
 		}
 
 		// ImGui::DockSpaceOverViewport();
-		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+		ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 		const ImGuiViewport *viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(viewport->WorkPos);
 		ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -119,11 +117,12 @@ public:
 		ImGui::DockSpace(dockspace_id, ImVec2{ 0.0f, 0.0f }, ImGuiDockNodeFlags_PassthruCentralNode);
 		ImGui::End();
 
+		//ImGui::Begin("test");
+		//ImGui::ShowStyleEditor();
+		//ImGui::End();
+
 		bool dummy;
 		uiModule->RenderImGui(dummy, cycle);
-
-		cycle.inputWidth = uiModule->GetInputWidth().GetValue();
-		cycle.enableUiHotkey = uiModule->GetEnabled().GetValue().hotkey;
 
 		if (uiModule->GetSearchChanged())
 		{
@@ -146,10 +145,6 @@ public:
 
 		if (uiModule->IsRequestingResetLayout())
 			ResetLayout();
-
-		for (auto& c : cycle.changes)
-			pendingChanges.push_back(std::move(c));
-		cycle.changes.clear();
 	}
 
 	inline void UpdateFromJson(const nlohmann::json& json)
@@ -160,11 +155,11 @@ public:
 
 	inline std::string ChangesAsJsonString()
 	{
-		if (!pendingChanges.empty())
+		if (!cycle.changes.empty())
 		{
 			nlohmann::json json;
-			json["Changes"] = std::move(pendingChanges);
-			pendingChanges.clear();
+			json["Changes"] = std::move(cycle.changes);
+			cycle.changes.clear();
 			return json.dump(0);
 		}
 		return "";

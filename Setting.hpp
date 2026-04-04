@@ -64,7 +64,7 @@ std::unique_ptr<Setting> JsonToSetting(const nlohmann::json&);
 struct Cycle
 {
 	nlohmann::json changes;
-	float inputWidth;
+	float inputWidth = 70.0f;
 	uint16_t enableUiHotkey;
 };
 	
@@ -1378,6 +1378,9 @@ public:
 
 		}
 		ImGui::End();
+
+		cycle.inputWidth = GetInputWidth().GetValue();
+		cycle.enableUiHotkey = GetEnabled().GetValue().hotkey;
 	}
 
 	inline bool IsRequestingResetLayout()
