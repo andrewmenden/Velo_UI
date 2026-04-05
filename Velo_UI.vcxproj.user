@@ -8,5 +8,8 @@
     <LocalDebuggerWorkingDirectory>$(TargetPath)/../</LocalDebuggerWorkingDirectory>
     <LocalDebuggerAttach>false</LocalDebuggerAttach>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerCommandArguments>
+    </LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArgumentsHistory>-driver OpenGL|+driver OpenGL|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
 </Project>
