@@ -143,17 +143,18 @@ protected:
 	{
 		if (ImGui::BeginPopupContextItem(id))
 		{
-			if (ImGui::Button("copy"))
+			if (ImGui::MenuItem("copy"))
 			{
 				cycle.clipboard = Copy();
 				ImGui::CloseCurrentPopup();
 			}
-			if (cycle.clipboard && PasteCompatible(cycle.clipboard.get()) && ImGui::Button("paste"))
+			if (cycle.clipboard && PasteCompatible(cycle.clipboard.get()) && ImGui::MenuItem("paste"))
 			{
 				Paste(cycle.clipboard.get(), cycle);
 				ImGui::CloseCurrentPopup();
 			}
-			if (ImGui::Button("restore default"))
+			ImGui::Separator();
+			if (ImGui::MenuItem("restore default"))
 			{
 				RestoreDefault(cycle);
 				ImGui::CloseCurrentPopup();
@@ -367,52 +368,59 @@ struct Toggle
 
 inline bool HotkeyContextMenuItems(uint16_t& hotkey)
 {
-	if (!(hotkey & (modifierShift | modifierGamePad)) && hotkey != unmappedKey && ImGui::Button("SHIFT+ modifier"))
+	bool canAddShift = !(hotkey & (modifierShift | modifierGamePad)) && hotkey != unmappedKey;
+	if (canAddShift && ImGui::MenuItem("SHIFT+ modifier"))
 	{
 		hotkey |= modifierShift;
 		hotkey &= ~modifierAny;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (!(hotkey & (modifierCtrl | modifierGamePad)) && hotkey != unmappedKey && ImGui::Button("CTRL+ modifier"))
+	bool canAddCtrl = !(hotkey & (modifierCtrl | modifierGamePad)) && hotkey != unmappedKey;
+	if (canAddCtrl && ImGui::MenuItem("CTRL+ modifier"))
 	{
 		hotkey |= modifierCtrl;
 		hotkey &= ~modifierAny;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (!(hotkey & (modifierAny | modifierGamePad)) && hotkey != unmappedKey && ImGui::Button("ANY+ modifier"))
+	bool canAddAny = !(hotkey & modifierAny) && hotkey != unmappedKey && !(hotkey & modifierGamePad);
+	if (canAddAny && ImGui::MenuItem("ANY+ modifier"))
 	{
 		hotkey |= modifierAny;
 		hotkey &= ~(modifierShift | modifierCtrl);
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::Button("LBUTTON"))
+
+	if (canAddShift || canAddCtrl || canAddAny)
+		ImGui::Separator();
+
+	if (ImGui::MenuItem("LBUTTON"))
 	{
 		hotkey = VK_LBUTTON;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::Button("RBUTTON"))
+	if (ImGui::MenuItem("RBUTTON"))
 	{
 		hotkey = VK_RBUTTON;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::Button("MBUTTON"))
+	if (ImGui::MenuItem("MBUTTON"))
 	{
 		hotkey = VK_MBUTTON;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::Button("XBUTTON1"))
+	if (ImGui::MenuItem("XBUTTON1"))
 	{
 		hotkey = VK_XBUTTON1;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::Button("XBUTTON2"))
+	if (ImGui::MenuItem("XBUTTON2"))
 	{
 		hotkey = VK_XBUTTON2;
 		ImGui::CloseCurrentPopup();
@@ -468,6 +476,7 @@ public:
 
 	inline void AdditionalContextMenuItems(Cycle& cycle) override
 	{
+		ImGui::Separator();
 		if (HotkeyContextMenuItems(value.hotkey))
 			AddChange(cycle);
 	}
@@ -520,6 +529,7 @@ public:
 
 	inline void AdditionalContextMenuItems(Cycle& cycle) override
 	{
+		ImGui::Separator();
 		if (HotkeyContextMenuItems(value))
 			AddChange(cycle);
 	}
