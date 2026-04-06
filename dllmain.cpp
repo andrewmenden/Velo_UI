@@ -156,6 +156,7 @@ extern "C"
         return Global::graphicsDeviceType != gdtNONE && ImGui::IsAnyItemActive();
     }
 
+    // Used for leaderboard run verification
     __declspec(dllexport) int32_t __cdecl WindowDragged()
     {
         return std::exchange(Global::windowDragged, false);
@@ -357,11 +358,13 @@ extern "C"
         NtSetTimerResolution(10000, true, &current);
     }
 
+    // Used by the `capture` command
     __declspec(dllexport) void __cdecl StartAudioCapture(int sampleRate)
     {
         AudioCapture::Start(sampleRate);
     }
-
+    
+    // Used by the `capture` command
     __declspec(dllexport) void __cdecl StopAudioCapture(const char* filename)
     {
         AudioCapture::Stop(filename);

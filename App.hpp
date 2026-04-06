@@ -59,7 +59,7 @@ public:
 		Packing packing{ Global::windowSize };
 		uiModule->ChangeBounds(packing.nextWindow());
 
-		auto enabledIt = uiModule->GetWindows().GetValue().begin();
+		auto enabledIt = uiModule->GetWindows()->GetValue().begin();
 		for (auto& m : modules | std::views::drop(1))
 		{
 			if (*(enabledIt++))
@@ -85,7 +85,7 @@ public:
 				modules.insert(modules.begin(), std::unique_ptr<Module>{ uiModule });
 			}
 			else
-				modules.push_back(std::make_unique<Module>(m));
+				modules.push_back(std::unique_ptr<Module>{ new SettingsModule{ m } });
 		}
 		ImGui::GetIO().IniFilename = iniPath;
 	}
@@ -122,7 +122,9 @@ public:
 		//ImGui::End();
 
 		bool dummy;
+		cycle.path.push_back(uiModule);
 		uiModule->RenderImGui(dummy, cycle);
+		cycle.path.pop_back();
 
 		if (uiModule->GetSearchChanged())
 		{
@@ -131,14 +133,18 @@ public:
 		}
 
 		//iterate through the remaining modules
-		auto enabledIt = uiModule->GetWindows().GetValue().begin();
+		auto enabledIt = uiModule->GetWindows()->GetValue().begin();
 		for (const auto& m : modules | std::views::drop(1))
 		{
 			bool wasEnabled = *enabledIt;
 			if (*enabledIt)
+			{
+				cycle.path.push_back(m.get());
 				m->RenderImGui(*enabledIt, cycle);
+				cycle.path.pop_back();
+			}
 			if (*enabledIt != wasEnabled)
-				uiModule->GetWindows().AddChange(cycle);
+				uiModule->GetWindows()->AddChange(cycle);
 
 			++enabledIt;
 		}
@@ -149,7 +155,7 @@ public:
 
 	inline void UpdateFromJson(const nlohmann::json& json)
 	{
-		for (auto& m : modules)
+		for (auto m : modules | std::views::transform([](auto& m) { return dynamic_cast<SettingsModule*>(m.get()); }) | std::views::filter([](auto m){ return m != nullptr; }))
 			m->UpdateFromJson(json);
 	}
 

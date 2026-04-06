@@ -2,6 +2,7 @@
 #define SETTING_H
 
 #include <string>
+#include <fstream>
 
 #include <json.hpp>
 
@@ -64,8 +65,30 @@ class Setting;
 
 std::unique_ptr<Setting> JsonToSetting(const nlohmann::json&);
 
+class PathNode
+{
+protected:
+	std::string name;
+
+public:
+	inline PathNode(std::string_view name) :
+		name{ name } {}
+
+	virtual ~PathNode() = default;
+
+	inline const std::string& GetName() const
+	{
+		return name;
+	}
+};
+
+using Path = std::vector<const PathNode*>; // wanted to use std::stack but it is not iterable unfortunately
+
+class Favorites;
+
 struct Cycle
 {
+	Path path;
 	nlohmann::json changes;
 	float inputWidth = 70.0f;
 	uint16_t enableUiHotkey;
@@ -87,12 +110,11 @@ struct Cycle
 		currentID = -1;
 	}
 };
-	
-class Setting
+
+class Setting : public PathNode
 {
 protected:
 	bool matchesSearch = true;
-	std::string name;
 	int id;
 	std::string tooltip;
 
@@ -100,7 +122,7 @@ protected:
 
 public:
 	inline Setting(const nlohmann::json& json) :
-		name{ json["Name"] },
+		PathNode{ json["Name"] },
 		id{ json["ID"] },
 		tooltip{ json["Tooltip"] } {}
 
@@ -114,11 +136,6 @@ public:
 	virtual inline void UpdateSearch(std::string_view pattern)
 	{
 		matchesSearch = LowerContains(name, pattern);
-	}
-
-	inline const std::string& GetName() const
-	{
-		return name;
 	}
 
 	virtual void RenderImGui(Cycle&) = 0;
@@ -1221,12 +1238,14 @@ public:
 				ImGui::SetTooltip(tooltip.c_str());
 			RenderContextMenu(nullptr, cycle);
 			RenderReset(cycle);
-			for (const auto& a : subSettings)
+			for (const auto& s : subSettings)
 			{
-				if (!a->GetMatchesSearch() && matchesSearch)
+				if (!s->GetMatchesSearch() && matchesSearch)
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-				a->RenderImGui(cycle);
-				if (!a->GetMatchesSearch() && matchesSearch)
+				cycle.path.push_back(s.get());
+				s->RenderImGui(cycle);
+				cycle.path.pop_back();
+				if (!s->GetMatchesSearch() && matchesSearch)
 					ImGui::PopStyleVar();
 			}
 			ImGui::TreePop();
@@ -1331,25 +1350,12 @@ inline std::unique_ptr<Setting> JsonToSetting(const nlohmann::json& json)
 		}() };
 }
 
-class Module
+class Module : public PathNode // interface
 {
-protected:
-	std::string name;
-	std::vector<std::unique_ptr<Setting>> settings;
 	ImVec4 changeBounds{ -1.0f, -1.0f, -1.0f, -1.0f };
-
+	
 public:
-	inline Module(const nlohmann::json& data) :
-		name{ data["Name"] }
-	{
-		for (const auto& s : data["Settings"])
-		{
-			if (s["ID"] >= 0)
-				settings.push_back(JsonToSetting(s));
-		}
-	}
-
-	virtual ~Module() = default;
+	using PathNode::PathNode;
 
 	inline void ChangeBounds(ImVec4 bounds)
 	{
@@ -1367,20 +1373,44 @@ protected:
 		}
 	}
 
+public:
+	inline virtual void RenderImGui(bool&, Cycle&) = 0;
+	inline virtual void UpdateSearch(std::string_view) = 0;
+};
+
+class SettingsModule : public Module
+{
+protected:
+	std::vector<std::unique_ptr<Setting>> settings;
+
+public:
+	inline SettingsModule(const nlohmann::json& data) :
+		Module{ data["Name"] }
+	{
+		for (const auto& s : data["Settings"])
+		{
+			if (s["ID"] >= 0)
+				settings.push_back(JsonToSetting(s));
+		}
+	}
+
+protected:
 	inline void RenderSettings(Cycle& cycle)
 	{
 		for (const auto& s : settings)
 		{
 			if (!s->GetMatchesSearch())
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			cycle.path.push_back(s.get());
 			s->RenderImGui(cycle);
+			cycle.path.pop_back();
 			if (!s->GetMatchesSearch())
 				ImGui::PopStyleVar();
 		}
 	}
 
 public:
-	inline virtual void RenderImGui(bool& open, Cycle& cycle)
+	inline virtual void RenderImGui(bool& open, Cycle& cycle) override
 	{
 		UpdateBounds();
 
@@ -1397,15 +1427,10 @@ public:
 			s->RestoreDefault(cycle);
 	}
 
-	inline std::string GetName() const
-	{
-		return name;
-	}
-
-	inline void UpdateSearch(std::string_view search)
+	inline void UpdateSearch(std::string_view pattern) override
 	{
 		for (const auto& s : settings)
-			s->UpdateSearch(search);
+			s->UpdateSearch(pattern);
 	}
 
 	inline void PushSetting(std::unique_ptr<Setting>&& setting)
@@ -1420,25 +1445,25 @@ public:
 	}
 
 	template <std::derived_from<Setting> T>
-	inline T& GetSetting(std::string_view name) const
+	inline T* GetSetting(std::string_view name) const
 	{
 		for (const auto& s : settings)
 		{
 			if (s->GetName() == name)
-				return dynamic_cast<T&>(*s);
+				return dynamic_cast<T*>(s.get());
 		}
-		throw;
+		return nullptr;
 	}
 };
 
-class UiModule : public Module
+class UiModule : public SettingsModule
 {
 	bool requestResetLayout = false;
 	bool searchChanged = false;
 	std::array<char, 100> searchBuffer{};
 
 public:
-	using Module::Module;
+	using SettingsModule::SettingsModule;
 
 	inline virtual void RenderImGui(bool&, Cycle& cycle) override
 	{
@@ -1462,8 +1487,8 @@ public:
 		}
 		ImGui::End();
 
-		cycle.inputWidth = GetInputWidth().GetValue();
-		cycle.enableUiHotkey = GetEnabled().GetValue().hotkey;
+		cycle.inputWidth = GetInputWidth()->GetValue();
+		cycle.enableUiHotkey = GetEnabled()->GetValue().hotkey;
 	}
 
 	inline bool IsRequestingResetLayout()
@@ -1481,18 +1506,79 @@ public:
 		return searchBuffer.data();
 	}
 
-	inline FloatSetting& GetInputWidth() const {
+	inline FloatSetting* GetInputWidth() const {
 		return GetSetting<FloatSetting>("input width");
 	}
 
-	inline BoolListSetting& GetWindows() const
+	inline BoolListSetting* GetWindows() const
 	{
 		return GetSetting<BoolListSetting>("windows");
 	}
 
-	inline ToggleSetting& GetEnabled() const
+	inline ToggleSetting* GetEnabled() const
 	{
 		return GetSetting<ToggleSetting>("enabled");
+	}
+};
+
+class Favorites : public Module
+{
+	std::vector<Path> favorites;
+
+public:
+	inline Favorites() :
+		Module{ "Favorites" } {}
+
+	inline void Save(const char* filename) const
+	{
+		nlohmann::json json;
+
+		for (const Path& p : favorites)
+		{
+			nlohmann::json pathJson;
+
+			for (const PathNode* n : p)
+				pathJson.push_back(n->GetName());
+		}
+
+		std::ofstream{ filename } << json;
+	}
+
+	inline void Load(const char* filename, std::ranges::input_range auto&& modules) requires
+		std::derived_from<std::ranges::range_value_t<decltype(modules)>, SettingsModule>
+	{
+		favorites.clear();
+
+		nlohmann::json json;
+		std::ifstream{ filename } >> json;
+
+		for (const auto& pathJson : json)
+		{
+			Path newPath;
+
+			auto pathIt = pathJson.begin();
+
+			auto modulesIt = std::ranges::find_if(modules, [&](const auto& m) { return m.GetName() == *pathIt; });
+			if (modulesIt == std::ranges::end(modules))
+				continue;
+
+			const SettingsModule& module = *modulesIt;
+
+			newPath.push_back(&module);
+
+			for (++pathIt; pathIt != pathJson.end(); ++pathIt)
+			{
+				Setting* setting = module.GetSetting<Setting>(*pathIt);
+				if (setting == nullptr)
+					goto end;
+				newPath.push_back(setting);
+			}
+
+			favorites.push_back(std::move(newPath));
+
+		end:
+			;
+		}
 	}
 };
 
