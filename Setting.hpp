@@ -1236,6 +1236,17 @@ public:
 		}
 	}
 
+	template <std::derived_from<Setting> T>
+	inline T* GetSetting(std::string_view name) const
+	{
+		for (const auto& s : subSettings)
+		{
+			if (s->GetName() == name)
+				return dynamic_cast<T*>(s.get());
+		}
+		return nullptr;
+	}
+
 	inline SettingType GetType() const override
 	{
 		return stCategory;

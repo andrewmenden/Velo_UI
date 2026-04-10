@@ -216,8 +216,14 @@ public:
 			ResetLayout(cycle);
 	}
 
-	inline FloatSetting* GetInputWidth() const {
-		return GetSetting<FloatSetting>("input width");
+	inline CategorySetting* GetSettingsUIStyle() const
+	{
+		return GetSetting<CategorySetting>("settings UI style");
+	}
+
+	inline FloatSetting* GetInputWidth() const 
+	{
+		return GetSettingsUIStyle()->GetSetting<FloatSetting>("input width");
 	}
 
 	inline BoolListSetting* GetWindows() const
