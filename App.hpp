@@ -6,13 +6,9 @@
 #include <ranges>
 
 #include "Global.hpp"
-#include "Setting.hpp"
+#include "Module.hpp"
 
 constexpr float fontSize = 16.0f;
-
-constexpr const char* iniPath = "Velo\\imgui.ini";
-constexpr const char* fontPath = "Velo\\fonts\\UiFont.ttf";
-constexpr const char* iconsPath = "Velo\\fonts\\Icons.ttf";
 
 // corresponds to Velo/fonts/Icons.ttf
 constexpr std::array<ImWchar, 5> iconRanges
@@ -25,11 +21,9 @@ constexpr std::array<ImWchar, 5> iconRanges
 class App
 {
 private:
-	std::vector<std::unique_ptr<Module>> modules; // modules[0] is always the UI module
-	UiModule* uiModule = nullptr;
-	Cycle cycle;
-
-	bool firstRender = true;
+	ModuleManager modules;
+	nlohmann::json changes;
+	std::unique_ptr<Setting> clipboard;
 
 public:
 	inline void Init()
@@ -37,68 +31,33 @@ public:
 		ImGuiIO& io = ImGui::GetIO();
 
 		io.Fonts->Clear();
-		io.Fonts->AddFontFromFileTTF(fontPath, fontSize);
+		io.Fonts->AddFontFromFileTTF(Global::fontPath, fontSize);
 
 		ImFontConfig config;
 		config.MergeMode = true;
 		//config.GlyphMinAdvanceX = fontSize; // Use if you want to make the icon monospaced
 
-		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_NavEnableKeyboard;
 
-		io.Fonts->AddFontFromFileTTF(iconsPath, fontSize, &config, iconRanges.data());
+		io.Fonts->AddFontFromFileTTF(Global::iconsPath, fontSize, &config, iconRanges.data());
 		io.Fonts->Build();
 	}
 
-	inline bool HasIni()
+	inline void UpdateFromJson(const nlohmann::json& json)
 	{
-		return std::filesystem::exists(iniPath);
-	}
-
-	inline void ResetLayout()
-	{
-		Packing packing{ Global::windowSize };
-		uiModule->ChangeBounds(packing.nextWindow());
-
-		auto enabledIt = uiModule->GetWindows()->GetValue().begin();
-		for (auto& m : modules | std::views::drop(1))
-		{
-			if (*(enabledIt++))
-				m->ChangeBounds(packing.nextWindow());
-		}
-	}
-
-	inline void RestoreLayoutFromIni()
-	{
-		if (HasIni())
-			ImGui::LoadIniSettingsFromDisk(iniPath);
-		else
-			ResetLayout();
+		modules.UpdateFromJson(json);
 	}
 
 	inline void LoadFromJson(const nlohmann::json& data)
 	{
-		for (const auto& m : data["Modules"])
-		{
-			if (m["Name"] == "UI")
-			{ // the UI module always comes first
-				uiModule = new UiModule{ m };
-				modules.insert(modules.begin(), std::unique_ptr<Module>{ uiModule });
-			}
-			else
-				modules.push_back(std::unique_ptr<Module>{ new SettingsModule{ m } });
-		}
-		ImGui::GetIO().IniFilename = iniPath;
+		modules.Push(std::make_unique<ClipboardModule>());
+		modules.LoadFromJson(data);
+		ImGui::GetIO().IniFilename = Global::iniPath;
 	}
 
 	inline void RenderImGui()
 	{
-		cycle.Reset();
-
-		if (firstRender)
-		{
-			RestoreLayoutFromIni();
-			firstRender = false;
-		}
+		Cycle cycle{ .modules = modules, .changes = changes };
 
 		// ImGui::DockSpaceOverViewport();
 		ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
@@ -117,55 +76,21 @@ public:
 		ImGui::DockSpace(dockspace_id, ImVec2{ 0.0f, 0.0f }, ImGuiDockNodeFlags_PassthruCentralNode);
 		ImGui::End();
 
-		//ImGui::Begin("test");
-		//ImGui::ShowStyleEditor();
-		//ImGui::End();
+		for (const auto& m : modules)
+			if (m->enabled)
+				m->RenderImGui(cycle);
 
-		bool dummy;
-		cycle.path.push_back(uiModule);
-		uiModule->RenderImGui(dummy, cycle);
-		cycle.path.pop_back();
-
-		if (uiModule->GetSearchChanged())
-		{
-			for (const auto& m : modules)
-				m->UpdateSearch(uiModule->GetSearch());
-		}
-
-		//iterate through the remaining modules
-		auto enabledIt = uiModule->GetWindows()->GetValue().begin();
-		for (const auto& m : modules | std::views::drop(1))
-		{
-			bool wasEnabled = *enabledIt;
-			if (*enabledIt)
-			{
-				cycle.path.push_back(m.get());
-				m->RenderImGui(*enabledIt, cycle);
-				cycle.path.pop_back();
-			}
-			if (*enabledIt != wasEnabled)
-				uiModule->GetWindows()->AddChange(cycle);
-
-			++enabledIt;
-		}
-
-		if (uiModule->IsRequestingResetLayout())
-			ResetLayout();
-	}
-
-	inline void UpdateFromJson(const nlohmann::json& json)
-	{
-		for (auto m : modules | std::views::transform([](auto& m) { return dynamic_cast<SettingsModule*>(m.get()); }) | std::views::filter([](auto m){ return m != nullptr; }))
-			m->UpdateFromJson(json);
+		for (const auto& m : modules)
+			m->Update(cycle);
 	}
 
 	inline std::string ChangesAsJsonString()
 	{
-		if (!cycle.changes.empty())
+		if (!changes.empty())
 		{
 			nlohmann::json json;
-			json["Changes"] = std::move(cycle.changes);
-			cycle.changes.clear();
+			json["Changes"] = std::move(changes);
+			changes.clear();
 			return json.dump(0);
 		}
 		return "";

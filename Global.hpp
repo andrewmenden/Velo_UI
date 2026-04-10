@@ -25,6 +25,10 @@ enum GraphicsDeviceType
 // Global state accessible from anywhere (try to minimize this as much as possible)
 namespace Global
 {
+	constexpr const char* iniPath = "Velo\\imgui.ini";
+	constexpr const char* fontPath = "Velo\\fonts\\UiFont.ttf";
+	constexpr const char* iconsPath = "Velo\\fonts\\Icons.ttf";
+
 	// Game's window size, updated on every frame via the RenderImGui function
 	inline ImVec2 windowSize{};
 

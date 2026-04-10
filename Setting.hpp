@@ -8,8 +8,7 @@
 
 #include "BoolVector.hpp"
 #include "Keys.hpp"
-#include "Packing.hpp"
-#include "Global.hpp"
+#include "ModuleManager.hpp"
 
 #define MAKE_COPY_PASTE(T) \
 inline std::unique_ptr<Setting> Copy() const override \
@@ -65,68 +64,27 @@ class Setting;
 
 std::unique_ptr<Setting> JsonToSetting(const nlohmann::json&);
 
-class PathNode
+class Setting : public Identifyable
 {
 protected:
 	std::string name;
-
-public:
-	inline PathNode(std::string_view name) :
-		name{ name } {}
-
-	virtual ~PathNode() = default;
-
-	inline const std::string& GetName() const
-	{
-		return name;
-	}
-};
-
-using Path = std::vector<const PathNode*>; // wanted to use std::stack but it is not iterable unfortunately
-
-class Favorites;
-
-struct Cycle
-{
-	Path path;
-	nlohmann::json changes;
-	float inputWidth = 70.0f;
-	uint16_t enableUiHotkey;
-	int currentID = -1;
-	std::unique_ptr<Setting> clipboard;
-
-	inline int NextID()
-	{
-		return ++currentID;
-	}
-
-	inline int CurrentId() const
-	{
-		return currentID;
-	}
-
-	inline void Reset()
-	{
-		currentID = -1;
-	}
-};
-
-class Setting : public PathNode
-{
-protected:
 	bool matchesSearch = true;
-	int id;
 	std::string tooltip;
 
 	Setting() = default;
 
 public:
 	inline Setting(const nlohmann::json& json) :
-		PathNode{ json["Name"] },
-		id{ json["ID"] },
+		Identifyable{ json["ID"] },
+		name{ json["Name"] },
 		tooltip{ json["Tooltip"] } {}
 
 	virtual ~Setting() = default;
+
+	inline const std::string& GetName() const
+	{
+		return name;
+	}
 
 	inline bool GetMatchesSearch() const
 	{
@@ -146,7 +104,7 @@ protected:
 	inline void RenderLabel(Cycle& cycle)
 	{
 		std::array<char, 16> id{};
-		_itoa_s(cycle.NextID(), id.data(), id.size(), 10);
+		_itoa_s(this->id, id.data(), id.size(), 10);
 		ImGui::PushID(id.data());
 		ImGui::SameLine();
 		ImGui::PopID();
@@ -160,22 +118,14 @@ protected:
 	{
 		if (ImGui::BeginPopupContextItem(id))
 		{
-			if (ImGui::MenuItem("copy"))
-			{
-				cycle.clipboard = Copy();
-				ImGui::CloseCurrentPopup();
-			}
-			if (cycle.clipboard && PasteCompatible(cycle.clipboard.get()) && ImGui::MenuItem("paste"))
-			{
-				Paste(cycle.clipboard.get(), cycle);
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::Separator();
 			if (ImGui::MenuItem("restore default"))
 			{
 				RestoreDefault(cycle);
 				ImGui::CloseCurrentPopup();
 			}
+
+			cycle.modules.ContextMenu(*this, cycle);
+
 			AdditionalContextMenuItems(cycle);
 			ImGui::EndPopup();
 		}
@@ -184,13 +134,12 @@ protected:
 public:
 	virtual void RestoreDefault(Cycle&) = 0;
 
-	virtual void UpdateFromJson(const nlohmann::json&) = 0;
-
 	virtual SettingType GetType() const = 0;
 
 	virtual std::unique_ptr<Setting> Copy() const = 0;
 	virtual bool PasteCompatible(Setting*) const = 0;
 	virtual void Paste(Setting*, Cycle&) = 0;
+	virtual void Visit(const std::function<void(Identifyable&)>&) = 0;
 };
 
 template <typename T> requires
@@ -262,17 +211,15 @@ public:
 
 	inline virtual void UpdateFromJson(const nlohmann::json& json) override
 	{
-		for (const auto& data : json["Changes"])
-		{
-			if (data["ID"] == id)
-			{
-				if constexpr (constructFromGet)
-					value = data["Value"].get<T>();
-				else
-					value = data["Value"];
-				return;
-			}
-		}
+		if constexpr (constructFromGet)
+			value = json["Value"].get<T>();
+		else
+			value = json["Value"];
+	}
+
+	inline virtual void Visit(const std::function<void(Identifyable&)>& f) override
+	{
+		f(*this);
 	}
 };
 
@@ -1232,7 +1179,7 @@ private:
 		ImGui::PopID();
 		if (ImGui::IsItemHovered())
 		{
-			ImGui::SetTooltip("restore defaults");
+			ImGui::SetTooltip("restore default");
 		}
 		ImGui::SetWindowFontScale(1.0f);
 		ImGui::PopStyleColor(3);
@@ -1242,6 +1189,7 @@ public:
 	inline void RenderImGui(Cycle& cycle) override
 	{
 		ImGui::SetWindowFontScale(1.0f);
+
 		if (ImGui::TreeNode(name.c_str()))
 		{
 			if (ImGui::IsItemHovered())
@@ -1252,9 +1200,7 @@ public:
 			{
 				if (!s->GetMatchesSearch() && matchesSearch)
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-				cycle.path.push_back(s.get());
 				s->RenderImGui(cycle);
-				cycle.path.pop_back();
 				if (!s->GetMatchesSearch() && matchesSearch)
 					ImGui::PopStyleVar();
 			}
@@ -1277,8 +1223,7 @@ public:
 
 	void UpdateFromJson(const nlohmann::json& json) override
 	{
-		for (const auto& s : subSettings)
-			s->UpdateFromJson(json);
+		
 	}
 
 	virtual inline void UpdateSearch(std::string_view pattern) override
@@ -1332,6 +1277,13 @@ public:
 			}
 		}
 	}
+
+	inline void Visit(const std::function<void(Identifyable&)>& f) override
+	{
+		f(*this);
+		for (const auto& s : subSettings)
+			s->Visit(f);
+	}
 };
 
 inline std::unique_ptr<Setting> JsonToSetting(const nlohmann::json& json)
@@ -1359,237 +1311,5 @@ inline std::unique_ptr<Setting> JsonToSetting(const nlohmann::json& json)
 			}
 		}() };
 }
-
-class Module : public PathNode // interface
-{
-	ImVec4 changeBounds{ -1.0f, -1.0f, -1.0f, -1.0f };
-	
-public:
-	using PathNode::PathNode;
-
-	inline void ChangeBounds(ImVec4 bounds)
-	{
-		changeBounds = bounds;
-	}
-
-protected:
-	inline void UpdateBounds()
-	{
-		if (changeBounds.w != -1.0f)
-		{
-			ImGui::SetNextWindowPos(ImVec2{ changeBounds.x, changeBounds.y });
-			ImGui::SetNextWindowSize(ImVec2{ changeBounds.z, changeBounds.w });
-			changeBounds = { -1.0f, -1.0f, -1.0f, -1.0f };
-		}
-	}
-
-public:
-	inline virtual void RenderImGui(bool&, Cycle&) = 0;
-	inline virtual void UpdateSearch(std::string_view) = 0;
-};
-
-class SettingsModule : public Module
-{
-protected:
-	std::vector<std::unique_ptr<Setting>> settings;
-
-public:
-	inline SettingsModule(const nlohmann::json& data) :
-		Module{ data["Name"] }
-	{
-		for (const auto& s : data["Settings"])
-		{
-			if (s["ID"] >= 0)
-				settings.push_back(JsonToSetting(s));
-		}
-	}
-
-protected:
-	inline void RenderSettings(Cycle& cycle)
-	{
-		for (const auto& s : settings)
-		{
-			if (!s->GetMatchesSearch())
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-			cycle.path.push_back(s.get());
-			s->RenderImGui(cycle);
-			cycle.path.pop_back();
-			if (!s->GetMatchesSearch())
-				ImGui::PopStyleVar();
-		}
-	}
-
-public:
-	inline virtual void RenderImGui(bool& open, Cycle& cycle) override
-	{
-		UpdateBounds();
-
-		if (ImGui::Begin(name.c_str(), &open))
-		{
-			RenderSettings(cycle);
-		}
-		ImGui::End();
-	}
-
-	inline void ResetDefaults(Cycle& cycle)
-	{
-		for (const auto& s : settings)
-			s->RestoreDefault(cycle);
-	}
-
-	inline void UpdateSearch(std::string_view pattern) override
-	{
-		for (const auto& s : settings)
-			s->UpdateSearch(pattern);
-	}
-
-	inline void PushSetting(std::unique_ptr<Setting>&& setting)
-	{
-		settings.push_back(std::move(setting));
-	}
-
-	inline void UpdateFromJson(const nlohmann::json& json)
-	{
-		for (const auto& s : settings)
-			s->UpdateFromJson(json);
-	}
-
-	template <std::derived_from<Setting> T>
-	inline T* GetSetting(std::string_view name) const
-	{
-		for (const auto& s : settings)
-		{
-			if (s->GetName() == name)
-				return dynamic_cast<T*>(s.get());
-		}
-		return nullptr;
-	}
-};
-
-class UiModule : public SettingsModule
-{
-	bool requestResetLayout = false;
-	bool searchChanged = false;
-	std::array<char, 100> searchBuffer{};
-
-public:
-	using SettingsModule::SettingsModule;
-
-	inline virtual void RenderImGui(bool&, Cycle& cycle) override
-	{
-		UpdateBounds();
-
-		if (ImGui::Begin(name.c_str()))
-		{
-			ImGui::PushID(cycle.NextID());
-			ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::InputTextWithHint("", "Search...", searchBuffer.data(), searchBuffer.size()))
-				searchChanged = true;
-			ImGui::PopID();
-
-			RenderSettings(cycle);
-
-			ImGui::PushID(cycle.NextID());
-			if (ImGui::Button("reset layout"))
-				requestResetLayout = true;
-			ImGui::PopID();
-
-		}
-		ImGui::End();
-
-		cycle.inputWidth = GetInputWidth()->GetValue();
-		cycle.enableUiHotkey = GetEnabled()->GetValue().hotkey;
-	}
-
-	inline bool IsRequestingResetLayout()
-	{
-		return std::exchange(requestResetLayout, false);
-	}
-
-	inline bool GetSearchChanged()
-	{
-		return std::exchange(searchChanged, false);
-	}
-
-	inline std::string_view GetSearch() const
-	{
-		return searchBuffer.data();
-	}
-
-	inline FloatSetting* GetInputWidth() const {
-		return GetSetting<FloatSetting>("input width");
-	}
-
-	inline BoolListSetting* GetWindows() const
-	{
-		return GetSetting<BoolListSetting>("windows");
-	}
-
-	inline ToggleSetting* GetEnabled() const
-	{
-		return GetSetting<ToggleSetting>("enabled");
-	}
-};
-
-class Favorites : public Module
-{
-	std::vector<Path> favorites;
-
-public:
-	inline Favorites() :
-		Module{ "Favorites" } {}
-
-	inline void Save(const char* filename) const
-	{
-		nlohmann::json json;
-
-		for (const Path& p : favorites)
-		{
-			nlohmann::json pathJson;
-
-			for (const PathNode* n : p)
-				pathJson.push_back(n->GetName());
-		}
-
-		std::ofstream{ filename } << json;
-	}
-
-	inline void Load(const char* filename, std::ranges::input_range auto&& modules) requires
-		std::derived_from<std::ranges::range_value_t<decltype(modules)>, SettingsModule>
-	{
-		favorites.clear();
-
-		nlohmann::json json;
-		std::ifstream{ filename } >> json;
-
-		for (const auto& pathJson : json)
-		{
-			Path newPath;
-
-			auto pathIt = pathJson.begin();
-
-			auto modulesIt = std::ranges::find_if(modules, [&](const auto& m) { return m.GetName() == *pathIt; });
-			if (modulesIt == std::ranges::end(modules))
-				continue;
-
-			const SettingsModule& module = *modulesIt;
-
-			newPath.push_back(&module);
-
-			for (++pathIt; pathIt != pathJson.end(); ++pathIt)
-			{
-				Setting* setting = module.GetSetting<Setting>(*pathIt);
-				if (setting == nullptr)
-					goto end;
-				newPath.push_back(setting);
-			}
-
-			favorites.push_back(std::move(newPath));
-
-		end:
-			;
-		}
-	}
-};
 
 #endif
