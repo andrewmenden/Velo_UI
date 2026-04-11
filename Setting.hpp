@@ -91,9 +91,11 @@ public:
 		return matchesSearch;
 	}
 
-	virtual inline void UpdateSearch(std::string_view pattern)
+	virtual inline void UpdateSearch(std::string_view pattern, bool matchTooltips)
 	{
-		matchesSearch = LowerContains(name, pattern);
+		matchesSearch = 
+			LowerContains(name, pattern) ||
+			(matchTooltips && LowerContains(tooltip, pattern));
 	}
 
 	virtual void RenderImGui(Cycle&) = 0;
@@ -195,13 +197,13 @@ public:
 		this->value = value;
 	}
 
-	inline void AddChange(Cycle& cycle) const
+	inline void AddChange(Cycle& cycle)
 	{
 		nlohmann::json json;
 		json["ID"] = id;
 		json["Value"] = value;
 		cycle.changes.push_back(std::move(json));
-		cycle.changedSettings.push_back((Setting*)this);
+		SetChanged();
 	}
 
 	inline virtual void RestoreDefault(Cycle& cycle) override
@@ -334,7 +336,7 @@ struct Toggle
 inline bool HotkeyContextMenuItems(uint16_t& hotkey)
 {
 	bool canAddShift = !(hotkey & (modifierShift | modifierGamePad)) && hotkey != unmappedKey;
-	if (canAddShift && ImGui::MenuItem("SHIFT+ modifier"))
+	if (canAddShift && ImGui::MenuItem("add SHIFT+ modifier"))
 	{
 		hotkey |= modifierShift;
 		hotkey &= ~modifierAny;
@@ -342,50 +344,57 @@ inline bool HotkeyContextMenuItems(uint16_t& hotkey)
 		return true;
 	}
 	bool canAddCtrl = !(hotkey & (modifierCtrl | modifierGamePad)) && hotkey != unmappedKey;
-	if (canAddCtrl && ImGui::MenuItem("CTRL+ modifier"))
+	if (canAddCtrl && ImGui::MenuItem("add CTRL+ modifier"))
 	{
 		hotkey |= modifierCtrl;
 		hotkey &= ~modifierAny;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	bool canAddAny = !(hotkey & modifierAny) && hotkey != unmappedKey && !(hotkey & modifierGamePad);
-	if (canAddAny && ImGui::MenuItem("ANY+ modifier"))
+	bool canAddAny = !(hotkey & (modifierAny | modifierGamePad)) && hotkey != unmappedKey;
+	if (canAddAny && ImGui::MenuItem("add ANY+ modifier"))
 	{
 		hotkey |= modifierAny;
 		hotkey &= ~(modifierShift | modifierCtrl);
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
+	bool canRemove = hotkey & (modifierShift | modifierCtrl | modifierAny);
+	if (canRemove && ImGui::MenuItem("remove modifiers"))
+	{
+		hotkey &= ~(modifierShift | modifierCtrl | modifierAny);
+		ImGui::CloseCurrentPopup();
+		return true;
+	}
 
-	if (canAddShift || canAddCtrl || canAddAny)
+	if (canAddShift || canAddCtrl || canAddAny || canRemove)
 		ImGui::Separator();
 
-	if (ImGui::MenuItem("LBUTTON"))
+	if (ImGui::MenuItem("set LBUTTON"))
 	{
 		hotkey = VK_LBUTTON;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::MenuItem("RBUTTON"))
+	if (ImGui::MenuItem("set RBUTTON"))
 	{
 		hotkey = VK_RBUTTON;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::MenuItem("MBUTTON"))
+	if (ImGui::MenuItem("set MBUTTON"))
 	{
 		hotkey = VK_MBUTTON;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::MenuItem("XBUTTON1"))
+	if (ImGui::MenuItem("set XBUTTON1"))
 	{
 		hotkey = VK_XBUTTON1;
 		ImGui::CloseCurrentPopup();
 		return true;
 	}
-	if (ImGui::MenuItem("XBUTTON2"))
+	if (ImGui::MenuItem("set XBUTTON2"))
 	{
 		hotkey = VK_XBUTTON2;
 		ImGui::CloseCurrentPopup();
@@ -726,11 +735,13 @@ public:
 		return stBoolList;
 	}
 
-	virtual inline void UpdateSearch(std::string_view pattern) override
+	virtual inline void UpdateSearch(std::string_view pattern, bool matchTooltip) override
 	{
+		Setting::UpdateSearch(pattern, matchTooltip);
+
 		auto containsPattern = [&](std::string_view h) { return LowerContains(h, pattern); };
 		std::ranges::transform(identifiers, identifiersMatchesSearch.begin(), containsPattern);
-		matchesSearch = containsPattern(name) || std::ranges::any_of(identifiersMatchesSearch, std::identity{});
+		matchesSearch = matchesSearch || std::ranges::any_of(identifiersMatchesSearch, std::identity{});
 	}
 
 	MAKE_COPY_PASTE(BoolListSetting)
@@ -1135,6 +1146,62 @@ public:
 	MAKE_COPY_PASTE(InputBoxSetting)
 };
 
+inline ImVec4 GetThemeTextColor(int theme)
+{
+	switch (theme)
+	{
+	case 0:
+		return ImVec4{ 1.0f, 1.0f, 1.0f, 1.0f };
+	case 1:
+		return ImVec4{ 0.0f, 0.0f, 0.0f, 1.0f };
+	case 2:
+		return ImVec4{ 0.9f, 0.9f, 0.9f, 1.0f };
+	}
+	return {};
+}
+
+inline ImVec4 GetThemeHighlightColor(int theme)
+{
+	switch (theme)
+	{
+	case 0: 
+	case 2:
+		return ImVec4{ 1.0f, 1.0f, 0.0f, 1.0f };
+	case 1:
+		return ImVec4{ 1.0f, 0.0f, 0.0f, 1.0f };
+	}
+	return {};
+}
+
+inline void PushSearchStyle(bool matches, Cycle& cycle)
+{
+	if (!matches)
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+	if (matches && cycle.highlightMatches && cycle.search)
+		ImGui::GetStyle().Colors[ImGuiCol_Text] = GetThemeHighlightColor(cycle.theme);
+	else
+		ImGui::GetStyle().Colors[ImGuiCol_Text] = GetThemeTextColor(cycle.theme);
+}
+
+inline void PopSearchStyle(bool matches, Cycle& cycle)
+{
+	if (!matches)
+		ImGui::PopStyleVar();
+	ImGui::GetStyle().Colors[ImGuiCol_Text] = GetThemeTextColor(cycle.theme);
+}
+
+inline void RenderChildSetting(Setting* setting, Cycle& cycle)
+{
+	bool matches = setting->GetMatchesSearch();
+
+	if (matches || !cycle.hideNonMatches)
+	{
+		PushSearchStyle(matches, cycle);
+		setting->RenderImGui(cycle);
+		PopSearchStyle(matches, cycle);
+	}
+}
+
 class CategorySetting : public Setting
 {
 private:
@@ -1199,11 +1266,7 @@ public:
 			RenderReset(cycle);
 			for (const auto& s : subSettings)
 			{
-				if (!s->GetMatchesSearch() && matchesSearch)
-					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-				s->RenderImGui(cycle);
-				if (!s->GetMatchesSearch() && matchesSearch)
-					ImGui::PopStyleVar();
+				RenderChildSetting(s.get(), cycle);
 			}
 			ImGui::TreePop();
 		}
@@ -1227,12 +1290,13 @@ public:
 		
 	}
 
-	virtual inline void UpdateSearch(std::string_view pattern) override
+	virtual inline void UpdateSearch(std::string_view pattern, bool matchTooltips) override
 	{
-		matchesSearch = LowerContains(name, pattern);
+		Setting::UpdateSearch(pattern, matchTooltips);
+
 		for (const auto& s : subSettings)
 		{
-			s->UpdateSearch(pattern);
+			s->UpdateSearch(pattern, matchTooltips);
 			matchesSearch |= s->GetMatchesSearch();
 		}
 	}

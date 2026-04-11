@@ -16,7 +16,7 @@ public:
 
 	inline bool Visible() override { return false; }
 	inline void RenderImGui(Cycle&) override {}
-	inline void UpdateSearch(std::string_view) override {}
+	inline void UpdateSearch(std::string_view, bool) override {}
 	inline void Visit(const std::function<void(Identifyable&)>&) override {}
 };
 
@@ -35,8 +35,13 @@ public:
 	{
 		UpdateBounds();
 
+		bool anyMatches = 
+			std::ranges::any_of(settings, [](const auto& s) { return s->GetMatchesSearch(); }) ||
+			(std::ranges::empty(settings) && !cycle.search); // can occur with favorites
+		PushSearchStyle(anyMatches, cycle);
 		if (ImGui::Begin(name.c_str(), &enabled))
 		{
+			PopSearchStyle(anyMatches, cycle);
 			RenderSettings(cycle);
 		}
 		ImGui::End();
@@ -48,22 +53,18 @@ public:
 		{
 			PreRender(&*setting, cycle);
 			
-			if (!setting->GetMatchesSearch())
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-			setting->RenderImGui(cycle);
-			if (!setting->GetMatchesSearch())
-				ImGui::PopStyleVar();
+			RenderChildSetting(&*setting, cycle);
 
 			PostRender(&*setting, cycle);
 		}
 	}
 
-	inline void UpdateSearch(std::string_view pattern) override
+	inline void UpdateSearch(std::string_view pattern, bool matchTooltips) override
 	{
 		if constexpr (Owning)
 		{
 			for (const auto& s : settings)
-				s->UpdateSearch(pattern);
+				s->UpdateSearch(pattern, matchTooltips);
 		}
 	}
 
@@ -114,32 +115,41 @@ class UiModule : public SettingsModule
 {
 	bool requestResetLayout = false;
 	bool searchChanged = false;
-	bool firstRender = true;
 	std::array<char, 100> searchBuffer{};
 
 public:
 	using SettingsModule::SettingsModule;
 
+	inline void Init(Cycle& cycle) override
+	{
+		RestoreLayoutFromIni(cycle);
+
+		UpdateStyleColorsPreset(GetSettingsUIStyleTheme(), GetSettingsUIStyleHue());
+		UpdateStyleRounding(GetSettingsUIStyleRounding());
+		UpdateStyleBorder(GetSettingsUIStyleBorder());
+		UpdateStyleCenteredTitle(GetSettingsUIStyleCenteredTitle());
+	}
+
 	inline void RenderImGui(Cycle& cycle) override
 	{
-		if (firstRender)
-		{
-			RestoreLayoutFromIni(cycle);
-			firstRender = false;
-
-			UpdateStyleColorsPreset(GetSettingsUIStyleTheme(), GetSettingsUIStyleHue());
-			UpdateStyleRounding(GetSettingsUIStyleRounding());
-			UpdateStyleBorder(GetSettingsUIStyleBorder());
-			UpdateStyleCenteredTitle(GetSettingsUIStyleCenteredTitle());
-		}
-
 		UpdateBounds();
 
-		cycle.inputWidth = GetInputWidth()->GetValue();
+		cycle.inputWidth = GetSettingsUIStyleInputWidth()->GetValue();
+		cycle.theme = GetSettingsUIStyleTheme()->GetValue();
+		cycle.highlightMatches = GetSearchHighlightMatches()->GetValue();
+		cycle.search = strnlen_s(searchBuffer.data(), searchBuffer.size()) != 0;
+		cycle.hideNonMatches = GetSearchHideNonMatches()->GetValue();
 		cycle.enableUiHotkey = GetEnabled()->GetValue().hotkey;
 
+		bool resetLayoutMatches = LowerContains("reset layout", searchBuffer.data());
+
+		bool anyMatches = 
+			std::ranges::any_of(settings, [](const auto& s) { return s->GetMatchesSearch(); }) ||
+			resetLayoutMatches;
+		PushSearchStyle(anyMatches, cycle);
 		if (ImGui::Begin(name.c_str()))
 		{
+			PopSearchStyle(anyMatches, cycle);
 			ImGui::PushID(cycle.NextID());
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::InputTextWithHint("", "Search...", searchBuffer.data(), searchBuffer.size()))
@@ -148,11 +158,17 @@ public:
 
 			RenderSettings(cycle);
 
-			ImGui::PushID(cycle.NextID());
-			if (ImGui::Button("reset layout"))
-				requestResetLayout = true;
-			ImGui::PopID();
+			if (resetLayoutMatches || !cycle.hideNonMatches)
+			{
+				PushSearchStyle(resetLayoutMatches, cycle);
 
+				ImGui::PushID(cycle.NextID());
+				if (ImGui::Button("reset layout"))
+					requestResetLayout = true;
+				ImGui::PopID();
+
+				PopSearchStyle(resetLayoutMatches, cycle);
+			}
 		}
 		ImGui::End();
 
@@ -183,28 +199,28 @@ public:
 		if (changed)
 			windows->AddChange(cycle);
 
-		if (searchChanged)
+		if (searchChanged || GetSearchMatchTooltips()->HasChanged())
 		{
 			for (const auto& m : cycle.modules)
-				m->UpdateSearch(searchBuffer.data());
+				m->UpdateSearch(searchBuffer.data(), GetSearchMatchTooltips()->GetValue());
 			searchChanged = false;
 		}
 
 		EnumeratorSetting* preset = GetSettingsUIStyleTheme();
 		FloatSetting* hue = GetSettingsUIStyleHue();
-		IntSetting* rounding = GetSettingsUIStyleRounding();
+		FloatSetting* rounding = GetSettingsUIStyleRounding();
 		BoolSetting* border = GetSettingsUIStyleBorder();
 		BoolSetting* centeredTitle = GetSettingsUIStyleCenteredTitle();
 
-		if (cycle.RemoveIfChanged(preset))
+		if (preset->HasChanged())
 			UpdateStyleColorsPreset(preset, hue);
-		if (cycle.RemoveIfChanged(hue))
+		if (hue->HasChanged())
 			UpdateStyleColorsHue(hue);
-		if (cycle.RemoveIfChanged(rounding))
+		if (rounding->HasChanged())
 			UpdateStyleRounding(rounding);
-		if (cycle.RemoveIfChanged(border))
+		if (border->HasChanged())
 			UpdateStyleBorder(border);
-		if (cycle.RemoveIfChanged(centeredTitle))
+		if (centeredTitle->HasChanged())
 			UpdateStyleCenteredTitle(centeredTitle);
 
 		if (requestResetLayout)
@@ -238,17 +254,17 @@ public:
 			ResetLayout(cycle);
 	}
 
-	inline void UpdateStyleRounding(IntSetting* rounding) const
+	inline void UpdateStyleRounding(FloatSetting* rounding) const
 	{
 		if (!rounding)
 			return;
 		ImGuiStyle& style = ImGui::GetStyle();
-		int roundingValue = rounding->GetValue();
-		style.WindowRounding = (float)roundingValue;
-		style.ChildRounding = (float)roundingValue;
-		style.FrameRounding = (float)roundingValue;
-		style.PopupRounding = (float)roundingValue;
-		style.GrabRounding = (float)roundingValue;
+		float roundingValue = rounding->GetValue();
+		style.WindowRounding = roundingValue;
+		style.ChildRounding = roundingValue;
+		style.FrameRounding = roundingValue;
+		style.PopupRounding = roundingValue;
+		style.GrabRounding = roundingValue;
 	}
 
 	inline void UpdateStyleBorder(BoolSetting* border) const
@@ -307,6 +323,16 @@ public:
 		}
 	}
 
+	inline BoolListSetting* GetWindows() const
+	{
+		return GetSetting<BoolListSetting>("windows");
+	}
+
+	inline ToggleSetting* GetEnabled() const
+	{
+		return GetSetting<ToggleSetting>("enabled");
+	}
+
 	inline CategorySetting* GetSettingsUIStyle() const
 	{
 		return GetSetting<CategorySetting>("settings UI style");
@@ -314,17 +340,17 @@ public:
 
 	inline EnumeratorSetting* GetSettingsUIStyleTheme() const
 	{
-		return GetSetting<EnumeratorSetting>("Preset");
+		return GetSetting<EnumeratorSetting>("preset");
 	}
 
 	inline FloatSetting* GetSettingsUIStyleHue() const
 	{
-		return GetSetting<FloatSetting>("Hue");
+		return GetSetting<FloatSetting>("hue");
 	}
 
-	inline IntSetting* GetSettingsUIStyleRounding() const
+	inline FloatSetting* GetSettingsUIStyleRounding() const
 	{
-		return GetSettingsUIStyle()->GetSetting<IntSetting>("rounding");
+		return GetSettingsUIStyle()->GetSetting<FloatSetting>("rounding");
 	}
 
 	inline BoolSetting* GetSettingsUIStyleBorder() const
@@ -337,19 +363,29 @@ public:
 		return GetSettingsUIStyle()->GetSetting<BoolSetting>("center title");
 	}
 
-	inline FloatSetting* GetInputWidth() const 
+	inline FloatSetting* GetSettingsUIStyleInputWidth() const
 	{
 		return GetSettingsUIStyle()->GetSetting<FloatSetting>("input width");
 	}
 
-	inline BoolListSetting* GetWindows() const
+	inline CategorySetting* GetSearch() const
 	{
-		return GetSetting<BoolListSetting>("windows");
+		return GetSetting<CategorySetting>("search");
 	}
 
-	inline ToggleSetting* GetEnabled() const
+	inline BoolSetting* GetSearchHighlightMatches() const
 	{
-		return GetSetting<ToggleSetting>("enabled");
+		return GetSearch()->GetSetting<BoolSetting>("highlight matches");
+	}
+
+	inline BoolSetting* GetSearchHideNonMatches() const
+	{
+		return GetSearch()->GetSetting<BoolSetting>("hide non matches");
+	}
+
+	inline BoolSetting* GetSearchMatchTooltips() const
+	{
+		return GetSearch()->GetSetting<BoolSetting>("match tooltips");
 	}
 };
 

@@ -23,7 +23,6 @@ class App
 private:
 	ModuleManager modules;
 	nlohmann::json changes;
-	std::unique_ptr<Setting> clipboard;
 
 public:
 	inline void Init()
@@ -76,12 +75,7 @@ public:
 		ImGui::DockSpace(dockspace_id, ImVec2{ 0.0f, 0.0f }, ImGuiDockNodeFlags_PassthruCentralNode);
 		ImGui::End();
 
-		for (const auto& m : modules)
-			if (m->enabled)
-				m->RenderImGui(cycle);
-
-		for (const auto& m : modules)
-			m->Update(cycle);
+		modules.DoCycle(cycle);
 	}
 
 	inline std::string ChangesAsJsonString()

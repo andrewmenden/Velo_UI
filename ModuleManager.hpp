@@ -10,6 +10,7 @@ class Identifyable
 {
 protected:
 	int id;
+	bool changed = false;
 
 public:
 	inline Identifyable(int id) : id{ id } {}
@@ -21,19 +22,36 @@ public:
 		return id;
 	}
 
+	inline const bool& HasChanged() const
+	{
+		return changed;
+	}
+
+	inline void SetChanged()
+	{
+		changed = true;
+	}
+
+	inline void ResetChanged()
+	{
+		changed = false;
+	}
+	
 	virtual void UpdateFromJson(const nlohmann::json&) = 0;
 };
 
 class ModuleManager;
-class Setting;
 
 struct Cycle
 {
 	ModuleManager& modules;
 	nlohmann::json& changes;
-	std::vector<Setting*> changedSettings;
 
 	float inputWidth;
+	int theme;
+	bool search = false;
+	bool highlightMatches;
+	bool hideNonMatches;
 	uint16_t enableUiHotkey;
 	int currentID = -1;
 
@@ -45,17 +63,6 @@ struct Cycle
 	inline int CurrentId() const
 	{
 		return currentID;
-	}
-
-	inline bool RemoveIfChanged(Setting* setting)
-	{
-		auto it = std::find(changedSettings.begin(), changedSettings.end(), setting);
-		if (it != changedSettings.end())
-		{
-			changedSettings.erase(it);
-			return true;
-		}
-		return false;
 	}
 };
 
@@ -98,9 +105,10 @@ protected:
 
 public:
 	inline virtual bool Visible() { return true; }
+	inline virtual void Init(Cycle&) {};
 	inline virtual void RenderImGui(Cycle&) = 0;
 	inline virtual void Update(Cycle&) {}; // called after RenderImGui
-	inline virtual void UpdateSearch(std::string_view) = 0;
+	inline virtual void UpdateSearch(std::string_view, bool) = 0;
 	inline virtual void ContextMenu(Identifyable&, Cycle&) {}
 	inline virtual void Visit(const std::function<void(Identifyable&)>&) = 0;
 };
@@ -111,6 +119,7 @@ class ModuleManager
 {
 	std::vector<std::unique_ptr<Module>> modules;
 	std::unordered_map<int, Identifyable*> idToIdent;
+	bool initCalled = false;
 
 public:
 	inline decltype(auto) begin()
@@ -149,6 +158,26 @@ public:
 		if (it != idToIdent.end())
 			return it->second;
 		return nullptr;
+	}
+
+	inline void DoCycle(Cycle& cycle)
+	{
+		if (!initCalled)
+		{
+			for (const auto& m : modules)
+				m->Init(cycle);
+			initCalled = true;
+		}
+
+		for (const auto& m : modules)
+			if (m->enabled)
+				m->RenderImGui(cycle);
+
+		for (const auto& m : modules)
+			m->Update(cycle);
+
+		for (auto& [id, ident] : idToIdent)
+			ident->ResetChanged();
 	}
 
 	inline void UpdateFromJson(const nlohmann::json& json)
