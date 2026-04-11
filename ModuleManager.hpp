@@ -25,11 +25,13 @@ public:
 };
 
 class ModuleManager;
+class Setting;
 
 struct Cycle
 {
 	ModuleManager& modules;
 	nlohmann::json& changes;
+	std::vector<Setting*> changedSettings;
 
 	float inputWidth;
 	uint16_t enableUiHotkey;
@@ -43,6 +45,17 @@ struct Cycle
 	inline int CurrentId() const
 	{
 		return currentID;
+	}
+
+	inline bool RemoveIfChanged(Setting* setting)
+	{
+		auto it = std::find(changedSettings.begin(), changedSettings.end(), setting);
+		if (it != changedSettings.end())
+		{
+			changedSettings.erase(it);
+			return true;
+		}
+		return false;
 	}
 };
 

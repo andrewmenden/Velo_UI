@@ -201,6 +201,7 @@ public:
 		json["ID"] = id;
 		json["Value"] = value;
 		cycle.changes.push_back(std::move(json));
+		cycle.changedSettings.push_back((Setting*)this);
 	}
 
 	inline virtual void RestoreDefault(Cycle& cycle) override

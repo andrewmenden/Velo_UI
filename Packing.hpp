@@ -31,7 +31,7 @@ public:
 		};
 	}
 
-	inline ImVec4 nextWindow()
+	inline ImVec4 NextWindow()
 	{
 		ImVec4 out{
 			gap + indexX * (size.x + gap),

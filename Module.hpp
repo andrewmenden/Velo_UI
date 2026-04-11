@@ -126,6 +126,11 @@ public:
 		{
 			RestoreLayoutFromIni(cycle);
 			firstRender = false;
+
+			UpdateStyleColorsPreset(GetSettingsUIStyleTheme(), GetSettingsUIStyleHue());
+			UpdateStyleRounding(GetSettingsUIStyleRounding());
+			UpdateStyleBorder(GetSettingsUIStyleBorder());
+			UpdateStyleCenteredTitle(GetSettingsUIStyleCenteredTitle());
 		}
 
 		UpdateBounds();
@@ -185,6 +190,23 @@ public:
 			searchChanged = false;
 		}
 
+		EnumeratorSetting* preset = GetSettingsUIStyleTheme();
+		FloatSetting* hue = GetSettingsUIStyleHue();
+		IntSetting* rounding = GetSettingsUIStyleRounding();
+		BoolSetting* border = GetSettingsUIStyleBorder();
+		BoolSetting* centeredTitle = GetSettingsUIStyleCenteredTitle();
+
+		if (cycle.RemoveIfChanged(preset))
+			UpdateStyleColorsPreset(preset, hue);
+		if (cycle.RemoveIfChanged(hue))
+			UpdateStyleColorsHue(hue);
+		if (cycle.RemoveIfChanged(rounding))
+			UpdateStyleRounding(rounding);
+		if (cycle.RemoveIfChanged(border))
+			UpdateStyleBorder(border);
+		if (cycle.RemoveIfChanged(centeredTitle))
+			UpdateStyleCenteredTitle(centeredTitle);
+
 		if (requestResetLayout)
 		{
 			ResetLayout(cycle);
@@ -204,7 +226,7 @@ public:
 		for (auto& m : cycle.modules)
 		{
 			if (m->enabled)
-				m->ChangeBounds(packing.nextWindow());
+				m->ChangeBounds(packing.NextWindow());
 		}
 	}
 
@@ -216,9 +238,103 @@ public:
 			ResetLayout(cycle);
 	}
 
+	inline void UpdateStyleRounding(IntSetting* rounding) const
+	{
+		if (!rounding)
+			return;
+		ImGuiStyle& style = ImGui::GetStyle();
+		int roundingValue = rounding->GetValue();
+		style.WindowRounding = (float)roundingValue;
+		style.ChildRounding = (float)roundingValue;
+		style.FrameRounding = (float)roundingValue;
+		style.PopupRounding = (float)roundingValue;
+		style.GrabRounding = (float)roundingValue;
+	}
+
+	inline void UpdateStyleBorder(BoolSetting* border) const
+	{
+		if (!border)
+			return;
+		ImGuiStyle& style = ImGui::GetStyle();
+		float borderSize = border->GetValue() ? 1.0f : 0.0f;
+		style.WindowBorderSize = borderSize;
+		style.ChildBorderSize = borderSize;
+		style.PopupBorderSize = borderSize;
+	}
+
+	inline void UpdateStyleCenteredTitle(BoolSetting* centeredTitle) const
+	{
+		if (!centeredTitle)
+			return;
+		ImGuiStyle& style = ImGui::GetStyle();
+		style.WindowTitleAlign.x = centeredTitle->GetValue() ? 0.5f : 0.0f;
+	}
+
+	inline void UpdateStyleColorsPreset(EnumeratorSetting* preset, FloatSetting* hue) const
+	{
+		if (!preset || !hue)
+			return;
+		switch (preset->GetValue())
+		{
+		case 0:
+			ImGui::StyleColorsDark();
+			break;
+		case 1:
+			ImGui::StyleColorsLight();
+			break;
+		case 2:
+			ImGui::StyleColorsClassic();
+			break;
+		}
+		UpdateStyleColorsHue(hue);
+	}
+
+	inline void UpdateStyleColorsHue(FloatSetting* hue) const
+	{
+		if (!hue)
+			return;
+
+		ImGuiStyle& style = ImGui::GetStyle();
+		float hueValue = hue->GetValue();
+
+		for (int i = 0; i < ImGuiCol_COUNT; i++)
+		{
+			ImVec4& col = style.Colors[i];
+			float h,s,v;
+			ImGui::ColorConvertRGBtoHSV(col.x, col.y, col.z, h, s, v);
+			h = hueValue;
+			ImGui::ColorConvertHSVtoRGB(h, s, v, col.x, col.y, col.z);
+		}
+	}
+
 	inline CategorySetting* GetSettingsUIStyle() const
 	{
 		return GetSetting<CategorySetting>("settings UI style");
+	}
+
+	inline EnumeratorSetting* GetSettingsUIStyleTheme() const
+	{
+		return GetSetting<EnumeratorSetting>("Preset");
+	}
+
+	inline FloatSetting* GetSettingsUIStyleHue() const
+	{
+		return GetSetting<FloatSetting>("Hue");
+	}
+
+	inline IntSetting* GetSettingsUIStyleRounding() const
+	{
+		return GetSettingsUIStyle()->GetSetting<IntSetting>("rounding");
+	}
+
+	inline BoolSetting* GetSettingsUIStyleBorder() const
+	{
+		return GetSettingsUIStyle()->GetSetting<BoolSetting>("border");
+	}
+
+	inline BoolSetting* GetSettingsUIStyleCenteredTitle() const
+	{
+		return GetSettingsUIStyle()->GetSetting<BoolSetting>("center title");
 	}
 
 	inline FloatSetting* GetInputWidth() const 
