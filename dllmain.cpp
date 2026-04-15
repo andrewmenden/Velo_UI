@@ -32,6 +32,12 @@ extern "C"
 
     __declspec(dllexport) int32_t __cdecl IsGameFocused()
     {
+        auto now = std::chrono::high_resolution_clock::now();
+        if (now - Global::lastForegroundHwndRefresh >= std::chrono::milliseconds(500))
+        {
+            Global::foregroundHwnd = GetForegroundWindow(); // help out the foreground detected every now and then
+            Global::lastForegroundHwndRefresh = now;
+        }
         return Global::gameHwnd == Global::foregroundHwnd;
     }
 

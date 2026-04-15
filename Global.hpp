@@ -3,6 +3,8 @@
 
 #define NOMINMAX
 
+#include <chrono>
+
 #include <Windows.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -37,6 +39,7 @@ namespace Global
 
 	// Foreground window handle
 	inline HWND foregroundHwnd = NULL;
+	inline std::chrono::high_resolution_clock::time_point lastForegroundHwndRefresh;
 
 	// d3d11 handles
 	inline ID3D11Device* deviced3d11 = NULL;
