@@ -1,4 +1,6 @@
 Velo_UI
 Debug
 Release
+!Win32/Debug
+!Win32/Release
 .vs
