@@ -195,6 +195,8 @@ inline uint16_t getPressedKey(uint16_t ignore)
 	{
 		if (k == VK_LSHIFT || k == VK_RSHIFT || k == VK_SHIFT || k == VK_LCONTROL || k == VK_RCONTROL || k == VK_CONTROL)
 			continue;
+		if (k == VK_MEDIA_PLAY_PAUSE)
+			continue;
 
 		if ((k | shiftMod | controlMod) != ignore && GetAsyncKeyState(k) & 0x8000)
 		{
